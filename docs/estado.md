@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-13 (Fase 2)
+Última actualización: 2026-08-13 (Fase 3)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -23,10 +23,20 @@ tenga sus tests/verificación pasando y esté commiteada.
   Pamplona en `test/datos-reales.test.js` (imprime valores intermedios y
   comprueba rangos físicos), ejecutar con `npm run test:datos` (requiere
   red; no forma parte de `npm test`).
+- **Fase 3 — Persistencia.** Módulos `src/persistencia/piso.js` y
+  `src/persistencia/anotaciones.js`, con el `storage` (interfaz
+  getItem/setItem, igual que `localStorage`) recibido como parámetro en vez
+  de leer `window.localStorage` directamente, para poder testear sin
+  navegador. `guardarParametrosPiso`/`cargarParametrosPiso` persisten bajo
+  la clave `solana:parametrosPiso`, con default embebido para el primer
+  arranque; `guardarAnotacion`/`listarAnotaciones` persisten un array bajo
+  `solana:anotaciones`. 7 casos de prueba manuales en
+  `test/persistencia.test.js` con un storage falso en memoria, integrados en
+  `npm test`.
 
 ## Fase actual
 
-Fase 3 — Persistencia (sin empezar)
+Fase 4 — Pantalla de parámetros (sin empezar)
 
 ## Fases
 
@@ -38,7 +48,7 @@ Fase 3 — Persistencia (sin empezar)
       pronóstico 6-8h) y SunCalc (posición solar). Sustituir los datos de
       prueba de la Fase 1 por reales. Verificar que los números tienen sentido
       para la ubicación y el momento actual.
-- [ ] **Fase 3 — Persistencia.** Guardar en localStorage los parámetros del
+- [x] **Fase 3 — Persistencia.** Guardar en localStorage los parámetros del
       piso/edificios y las anotaciones de temperatura (con sus etiquetas
       opcionales, spec.md §3.5).
 - [ ] **Fase 4 — Pantalla de parámetros.** Interfaz para editar la geometría
@@ -155,3 +165,54 @@ Fase 3 — Persistencia (sin empezar)
    Comprueba rangos físicos (elevación, azimut, temperatura, nubosidad) en
    vez de valores exactos, y también imprime los intermedios para
    verificación a ojo, siguiendo el mismo patrón que `model.test.js`.
+
+### Fase 3 — Persistencia
+
+1. **`bandaConfort` pasa a formar parte de `parametrosPiso`.** Antes vivía
+   como parámetro opcional de `recomendarVentana`/`recomendarPersiana` con
+   default `BANDA_CONFORT` importado de `constantes.js`. Ahora ambas
+   funciones leen `parametrosPiso.bandaConfort` (parámetro obligatorio, sin
+   default en la firma) y `constantes.js` solo aporta el valor de partida
+   dentro de `PARAMETROS_PISO_POR_DEFECTO`. Motivo: spec.md §6.3 la trata
+   como un parámetro editable del piso, igual que `UA`/`SHGC`/etc., así que
+   Fase 4 solo necesita una pantalla de edición, no dos mecanismos
+   distintos.
+
+2. **`storage` inyectado, no `window.localStorage` directo.** Tanto
+   `piso.js` como `anotaciones.js` reciben `storage` (con `getItem`/
+   `setItem`) como primer parámetro de cada función. Permite testear con un
+   storage falso en memoria (`test/persistencia.test.js`) sin depender del
+   navegador, siguiendo el mismo criterio de "verificable sin interfaz" que
+   guio la Fase 1. Cuando exista interfaz (Fase 4+), se le pasará
+   `window.localStorage` tal cual — cumple la misma interfaz.
+
+3. **Claves de etiquetas de anotación (§3.5).** `'cocinando'`,
+   `'climatizacion'`, `'masGente'`. `'climatizacion'` cubre tanto
+   calefacción como aire acondicionado como un único factor — es como los
+   trata spec.md §3.5 (un solo concepto de "climatización encendida"), así
+   que no hace falta distinguir cuál de las dos es.
+
+4. **`id` de anotación: `crypto.randomUUID()`, no el `timestamp`.**
+   `timestamp` es el dato de cuándo ocurrió la anotación; `id` es su
+   identidad. Si en el futuro se permite corregir el timestamp de una
+   anotación ya guardada, no debe cambiar su identidad ni duplicarla.
+   `crypto.randomUUID()` está disponible globalmente en Node 20 (usado en
+   este proyecto) y en navegadores Android/Chrome modernos, sin dependencia
+   añadida.
+
+5. **`version: 1` en ambos objetos guardados.** `guardarParametrosPiso`
+   envuelve el objeto completo en `{ version: 1, ...parametrosPiso }`; cada
+   anotación individual (no el array que las contiene) lleva su propio
+   `version: 1`. Objetivo: poder migrar el formato de cualquiera de los dos
+   en el futuro sin romper datos ya guardados en el móvil de un usuario
+   real. `cargarParametrosPiso` descarta el campo `version` al devolver el
+   objeto (el modelo puro no lo espera); `listarAnotaciones` lo deja tal
+   cual en cada elemento.
+
+6. **Valores por defecto de `PARAMETROS_PISO_POR_DEFECTO`.** Geometría de
+   ventanas y edificios enfrente: valores reales de spec.md §3.4. El resto
+   (`superficie`, `UA`, `factorCapacidad`, `SHGC`, `renovacionesHora`):
+   mismos valores de prueba que ya usaba `test/model.test.js` desde la Fase
+   1 — sirven para que la app funcione en el primer arranque, pero no son
+   defaults "finales"; eso se decide en la pantalla de parámetros de la
+   Fase 4.

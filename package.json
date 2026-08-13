@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/model.test.js",
+    "test": "node test/model.test.js && node test/persistencia.test.js",
     "test:datos": "node test/datos-reales.test.js"
   },
   "dependencies": {

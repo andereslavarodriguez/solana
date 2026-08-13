@@ -5,7 +5,6 @@
 // persiana.
 
 import { simularHorizonte } from './termico.js';
-import { BANDA_CONFORT } from './constantes.js';
 
 function distanciaABanda(tIn, banda) {
   if (tIn < banda.min) return banda.min - tIn;
@@ -32,9 +31,9 @@ export function recomendarVentana(
   tInActual,
   pronostico,
   estadosVentanasActuales,
-  parametrosPiso,
-  banda = BANDA_CONFORT
+  parametrosPiso
 ) {
+  const banda = parametrosPiso.bandaConfort;
   const estadosAbierta = clonarEstados(estadosVentanasActuales);
   estadosAbierta[nombreVentana].abierta = true;
 
@@ -65,9 +64,9 @@ export function recomendarPersiana(
   tInActual,
   pronostico,
   estadosVentanasActuales,
-  parametrosPiso,
-  banda = BANDA_CONFORT
+  parametrosPiso
 ) {
+  const banda = parametrosPiso.bandaConfort;
   if (tInActual > banda.max) {
     return {
       accion: 'bajar',

@@ -26,6 +26,7 @@ const piso = {
   factorCapacidad: 6,
   SHGC: 0.6,
   renovacionesHora: 3, // ventana bien abierta, no solo entreabierta
+  bandaConfort: { min: 21, max: 25 },
   ventanas: [
     { nombre: 'A', orientacion: 248, ancho: 2.0, alturaEdificioEnfrente: 15, distanciaEdificioEnfrente: 45 },
     { nombre: 'B', orientacion: 68, ancho: 1.8, alturaEdificioEnfrente: 12, distanciaEdificioEnfrente: 20 },
