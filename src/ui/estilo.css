@@ -1,0 +1,123 @@
+/* Estilo cálido y hogareño (CLAUDE.md): nada de estética de sala de control. */
+
+:root {
+  --fondo: #faf3ea;
+  --papel: #fffaf3;
+  --papel-calibrable: #fdf1de;
+  --borde: #e6d7c3;
+  --texto: #4a3f35;
+  --texto-suave: #8a7a68;
+  --acento: #c97b4a;
+  --acento-oscuro: #a86139;
+  --error: #b5484c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+}
+
+#app {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+h1 {
+  font-weight: 500;
+  font-size: 1.6rem;
+  margin-bottom: 1.25rem;
+}
+
+h2 {
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--texto-suave);
+  margin: 1.5rem 0 0.5rem;
+}
+
+.seccion {
+  border: 1px solid var(--borde);
+  border-radius: 0.75rem;
+  padding: 0.5rem 1.25rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: var(--papel);
+}
+
+.seccion legend {
+  font-weight: 600;
+  padding: 0 0.5rem;
+}
+
+.seccion-calibrable {
+  background: var(--papel-calibrable);
+}
+
+.nota {
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.9rem;
+}
+
+label {
+  font-size: 0.9rem;
+  color: var(--texto-suave);
+}
+
+input[type='number'] {
+  font-size: 1rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--borde);
+  border-radius: 0.5rem;
+  background: #fff;
+  color: var(--texto);
+}
+
+input[type='number']:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+
+input.invalid {
+  border-color: var(--error);
+  outline-color: var(--error);
+}
+
+.error {
+  min-height: 1.1rem;
+  color: var(--error);
+  font-size: 0.85rem;
+}
+
+button[type='submit'] {
+  font-size: 1rem;
+  padding: 0.7rem 1.5rem;
+  border: none;
+  border-radius: 0.6rem;
+  background: var(--acento);
+  color: #fff;
+  cursor: pointer;
+}
+
+button[type='submit']:hover {
+  background: var(--acento-oscuro);
+}
+
+#mensaje-guardado {
+  color: var(--acento-oscuro);
+  font-weight: 500;
+}

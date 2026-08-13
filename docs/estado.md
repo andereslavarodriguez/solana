@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-13 (Fase 3)
+Última actualización: 2026-08-13 (Fase 4)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -33,10 +33,21 @@ tenga sus tests/verificación pasando y esté commiteada.
   `solana:anotaciones`. 7 casos de prueba manuales en
   `test/persistencia.test.js` con un storage falso en memoria, integrados en
   `npm test`.
+- **Fase 4 — Pantalla de parámetros.** Primera fase de interfaz. Vite +
+  JS vanilla (sin framework), `index.html` en la raíz + `src/ui/`
+  (`main.js`, `parametros.js`, `validacion.js`, `estilo.css`), que consume
+  `src/persistencia/` y `src/data/` tal cual, sin tocarlos. Nuevo módulo
+  `src/persistencia/ubicacion.js` (paralelo a `piso.js`, clave
+  `solana:ubicacion`) para hacer editable de verdad la ubicación (spec.md
+  §3.1), que hasta ahora era una constante fija. Formulario con validación
+  por rangos (`src/ui/validacion.js`, funciones puras testeadas en
+  `test/validacion.test.js`, 16 casos integrados en `npm test`) y dos
+  secciones visualmente distintas para separar datos fijos de parámetros
+  calibrables por la Fase 7 (detalle en "Decisiones tomadas").
 
 ## Fase actual
 
-Fase 4 — Pantalla de parámetros (sin empezar)
+Fase 5 — Dashboard (sin empezar)
 
 ## Fases
 
@@ -51,7 +62,7 @@ Fase 4 — Pantalla de parámetros (sin empezar)
 - [x] **Fase 3 — Persistencia.** Guardar en localStorage los parámetros del
       piso/edificios y las anotaciones de temperatura (con sus etiquetas
       opcionales, spec.md §3.5).
-- [ ] **Fase 4 — Pantalla de parámetros.** Interfaz para editar la geometría
+- [x] **Fase 4 — Pantalla de parámetros.** Interfaz para editar la geometría
       del piso, ventanas y edificios obstáculo (spec.md §3.4, §6.3).
 - [ ] **Fase 5 — Dashboard.** Pantalla principal: clima en vivo, recomendación
       independiente por ventana (ventana + persiana), botón de anotar
@@ -216,3 +227,75 @@ Fase 4 — Pantalla de parámetros (sin empezar)
    1 — sirven para que la app funcione en el primer arranque, pero no son
    defaults "finales"; eso se decide en la pantalla de parámetros de la
    Fase 4.
+
+### Fase 4 — Pantalla de parámetros
+
+1. **Stack: Vite + JS vanilla, sin framework de UI.** Vite solo como
+   herramienta de dev server/build (necesaria para servir los módulos ES ya
+   existentes en el navegador, y para `vite-plugin-pwa` en la Fase 8 sin
+   escribir el service worker a mano). Sin React/Vue/Svelte: coherente con
+   el resto del proyecto (todo son funciones puras hasta ahora, solo
+   dependencia `suncalc`), y no hay necesidad real de un framework
+   reactivo — el dashboard de la Fase 5 actualiza pocos elementos a baja
+   frecuencia (clima cada ~15min) y la escena 3D de la Fase 6 será
+   Three.js con su propio bucle de render imperativo. Si en el futuro la
+   complejidad de la UI lo justifica de verdad, se reconsidera entonces.
+
+2. **`vite.config.js`: `base: '/solana/'`.** No hay remote de git
+   configurado todavía; se usa el nombre del directorio/proyecto actual
+   como valor de partida. **Pendiente de revisar** el día que exista el
+   repo real en GitHub Pages si el nombre del repo acaba siendo distinto
+   (spec.md §7 — GitHub Pages sirve cada repo bajo `/<nombre-repo>/`).
+
+3. **`src/persistencia/ubicacion.js`, módulo nuevo.** La ubicación
+   (spec.md §3.1) no tenía persistencia — vivía como la constante
+   `UBICACION_PISO` en `src/data/ubicacion.js`, marcada desde la Fase 2
+   como "editable de verdad en la Fase 4". Se creó un módulo paralelo a
+   `piso.js` (misma interfaz `storage`, misma envoltura `version: 1`)
+   en vez de meter `lat`/`lon` dentro de `parametrosPiso`, porque la spec
+   ya los trata como conceptos distintos (§3.1 vs §3.4) y ya vivían en
+   módulos de datos separados.
+
+4. **Distinción visual fijo vs. calibrable, y qué pasa si se edita un
+   calibrable a mano.** La pantalla tiene dos secciones separadas:
+   "Datos fijos del piso" (superficie, altura de techo, banda de confort,
+   ubicación, ventanas — estilo neutro) y "Parámetros del modelo" (`UA`,
+   `factorCapacidad`, `SHGC`, `renovacionesHora` — fondo con tono cálido
+   distinto y una nota fija explicando que se recalibran solos).
+   **Decisión explícita sobre el conflicto edición manual vs.
+   recalibración automática (Fase 7):** la recalibración sobrescribe sin
+   más los valores calibrables con lo que calcule — "last write wins", sin
+   bloqueo ni modo "override" persistente. Una edición manual vale hasta
+   que corre la siguiente recalibración, que la pisa sin avisar (la nota
+   en la UI ya lo advierte). Se descarta a propósito un mecanismo de
+   override porque sería maquinaria para una función (Fase 7) que no
+   existe todavía — contra la regla del proyecto de no diseñar para
+   requisitos hipotéticos. Si en el uso real esto resulta confuso, se
+   revisa en la Fase 7 con datos de uso reales, no ahora especulando.
+
+5. **Validación: rechazo estricto en submit, sin redondeo/clamp
+   silencioso.** Fuera de rango o no numérico no se guarda; se marca el
+   campo y no se persiste nada hasta que todos los campos sean válidos.
+   Rangos en `src/ui/validacion.js` (`RANGOS`), únicos también para los
+   atributos `min`/`max` de los `<input type="number">`:
+
+   | Campo | Mín | Máx |
+   |---|---|---|
+   | `superficie` (m²) | 5 | 200 |
+   | `alturaTecho` (m) | 2.0 | 4.0 |
+   | `UA` (W/°C) | 5 | 300 |
+   | `factorCapacidad` | 1 | 20 |
+   | `SHGC` | 0 | 1 |
+   | `renovacionesHora` (ACH) | 0 | 20 |
+   | `bandaConfort.min`/`.max` (°C) | 10 | 30 |
+   | `ventana.orientacion` (°) | 0 | 360 |
+   | `ventana.ancho` (m) | 0.3 | 10 |
+   | `alturaEdificioEnfrente` (m) | 0 | 200 |
+   | `distanciaEdificioEnfrente` (m) | 1 | 500 |
+   | `lat` | -90 | 90 |
+   | `lon` | -180 | 180 |
+
+   Además, validación cruzada: `bandaConfort.min` debe ser estrictamente
+   menor que `bandaConfort.max` (no basta con no ser mayor). Límites de
+   `distanciaEdificioEnfrente` empiezan en 1 (no 0) para evitar dividir
+   entre cero en `elevacionLimiteSombra()` (`src/model/sombra.js`).
