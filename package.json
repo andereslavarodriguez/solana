@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/model.test.js"
+    "test": "node test/model.test.js",
+    "test:datos": "node test/datos-reales.test.js"
+  },
+  "dependencies": {
+    "suncalc": "^2.0.1"
   }
 }
