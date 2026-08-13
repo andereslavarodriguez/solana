@@ -29,12 +29,21 @@ export function montarPantallaParametros(root, storage) {
     evento.preventDefault();
     manejarGuardado(form, storage);
   });
+
+  // Sin carga asíncrona en esta pantalla, pero se marca igual para que el
+  // script de verificación visual (scripts/captura-pantalla.mjs, Fase 5)
+  // pueda esperar a `[data-cargado="true"]` de la misma forma en cualquier
+  // pantalla de la app.
+  root.dataset.cargado = 'true';
 }
 
 function plantilla(piso, ubicacion) {
   return `
     <form id="form-parametros" novalidate>
-      <h1>Parámetros del piso</h1>
+      <header class="cabecera">
+        <h1>Parámetros del piso</h1>
+        <nav><a href="/">← Volver al panel</a></nav>
+      </header>
 
       <fieldset class="seccion seccion-fija">
         <legend>Datos fijos del piso</legend>

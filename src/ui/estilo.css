@@ -10,6 +10,8 @@
   --acento: #c97b4a;
   --acento-oscuro: #a86139;
   --error: #b5484c;
+  --aviso: #b8873a;
+  --aviso-fondo: #fbecd2;
 }
 
 * {
@@ -120,4 +122,150 @@ button[type='submit']:hover {
 #mensaje-guardado {
   color: var(--acento-oscuro);
   font-weight: 500;
+}
+
+/* Dashboard (Fase 5) */
+
+.cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.cabecera h1 {
+  margin-bottom: 0;
+}
+
+.cabecera nav a {
+  color: var(--acento-oscuro);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.cabecera nav a:hover {
+  text-decoration: underline;
+}
+
+.tarjeta {
+  border: 1px solid var(--borde);
+  border-radius: 0.75rem;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background: var(--papel);
+}
+
+.tarjeta h2,
+.tarjeta h3 {
+  margin-top: 0;
+}
+
+.tarjeta-error {
+  border-color: var(--error);
+}
+
+.cargando {
+  color: var(--texto-suave);
+}
+
+.datos-clima {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem 1.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.datos-clima dt {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
+.datos-clima dd {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+button[type='button'] {
+  font-size: 0.9rem;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--acento);
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--acento-oscuro);
+  cursor: pointer;
+}
+
+button[type='button']:hover {
+  background: var(--papel-calibrable);
+}
+
+.etiquetas {
+  border: none;
+  padding: 0;
+  margin: 0.75rem 0;
+}
+
+.etiquetas legend {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  padding: 0;
+}
+
+.etiquetas label {
+  display: block;
+  margin: 0.35rem 0;
+}
+
+.etiquetas input {
+  margin-right: 0.4rem;
+}
+
+.tarjetas-ventanas {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 40rem) {
+  .tarjetas-ventanas {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.estado-actual {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.estado-actual label {
+  color: var(--texto);
+  font-size: 0.95rem;
+}
+
+.estado-actual input {
+  margin-right: 0.5rem;
+}
+
+.recomendacion p {
+  margin: 0.4rem 0;
+}
+
+.recomendacion-vacia {
+  color: var(--texto-suave);
+  font-style: italic;
+}
+
+.nota-antiguedad {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
+.aviso-antiguedad {
+  color: var(--aviso);
+  background: var(--aviso-fondo);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
 }

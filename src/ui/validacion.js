@@ -22,6 +22,10 @@ export const RANGOS = {
   distanciaEdificioEnfrente: { min: 1, max: 500 },
   lat: { min: -90, max: 90 },
   lon: { min: -180, max: 180 },
+  // Temperatura interior anotada a mano (spec.md §3.5, Fase 5). Rango
+  // generoso de plausibilidad para un interior habitado, no una banda de
+  // confort (esa es bandaConfort, un parámetro aparte).
+  temperaturaInterior: { min: 0, max: 45 },
 };
 
 export function validarCampoNumerico(valor, rango) {

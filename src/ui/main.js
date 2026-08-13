@@ -1,3 +1,3 @@
-import { montarPantallaParametros } from './parametros.js';
+import { montarDashboard } from './dashboard.js';
 
-montarPantallaParametros(document.getElementById('app'), window.localStorage);
+montarDashboard(document.getElementById('app'), window.localStorage);

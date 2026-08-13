@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-13 (Fase 4)
+Última actualización: 2026-08-13 (Fase 5)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -44,10 +44,32 @@ tenga sus tests/verificación pasando y esté commiteada.
   `test/validacion.test.js`, 16 casos integrados en `npm test`) y dos
   secciones visualmente distintas para separar datos fijos de parámetros
   calibrables por la Fase 7 (detalle en "Decisiones tomadas").
+- **Fase 5 — Dashboard.** `index.html` pasa a montar la pantalla principal
+  (`src/ui/dashboard.js`); la pantalla de parámetros se muda a
+  `parametros.html` (`src/ui/main-parametros.js`), con enlaces cruzados
+  entre ambas. El dashboard orquesta, sin tocarlos: `obtenerDatosReales`
+  (Fase 2) para clima/pronóstico en vivo, con refresco automático cada 15
+  min + botón manual; `recomendarVentana`/`recomendarPersiana` (Fase 1)
+  por ventana; y persistencia (`piso.js`, `ubicacion.js`, `anotaciones.js`
+  de Fases 3-4). Módulo nuevo `src/persistencia/estadoVentanas.js`
+  (clave `solana:estadoVentanas`) para el estado físico real
+  ventana-abierta/persiana-arriba, que declara el usuario con toggles
+  porque no hay sensores. Módulo nuevo `src/ui/antiguedadAnotacion.js`
+  (funciones puras) para decidir si la última anotación está fresca,
+  merece un aviso o ha caducado (umbrales 3h/12h, motivo detallado en
+  "Decisiones tomadas"); sin anotación válida no se fabrica una
+  recomendación. 16 casos de prueba manuales nuevos
+  (`test/estadoVentanas.test.js`, `test/antiguedadAnotacion.test.js`),
+  integrados en `npm test`. Verificación visual con
+  `scripts/captura-pantalla.mjs`, script de Playwright reutilizable
+  (committeado, a diferencia de la verificación ad-hoc de la Fase 4) que
+  espera a `[data-cargado="true"]` en vez de un timeout fijo — comprobado
+  a ojo en los estados sin anotación, con anotación, con toggles, con
+  validación de rango y con fallo de red simulado.
 
 ## Fase actual
 
-Fase 5 — Dashboard (sin empezar)
+Fase 6 — Escena 3D (sin empezar)
 
 ## Fases
 
@@ -64,7 +86,7 @@ Fase 5 — Dashboard (sin empezar)
       opcionales, spec.md §3.5).
 - [x] **Fase 4 — Pantalla de parámetros.** Interfaz para editar la geometría
       del piso, ventanas y edificios obstáculo (spec.md §3.4, §6.3).
-- [ ] **Fase 5 — Dashboard.** Pantalla principal: clima en vivo, recomendación
+- [x] **Fase 5 — Dashboard.** Pantalla principal: clima en vivo, recomendación
       independiente por ventana (ventana + persiana), botón de anotar
       temperatura (spec.md §6.2).
 - [ ] **Fase 6 — Escena 3D.** Vista fija estilo Los Sims, geometría limpia,
@@ -313,3 +335,84 @@ Fase 5 — Dashboard (sin empezar)
    backend" (spec.md §7). El binario del navegador en sí no se commitea
    (vive fuera del repo, en `~/.cache/ms-playwright/`); cada máquina
    nueva necesita `npx playwright install chromium` una vez.
+
+### Fase 5 — Dashboard
+
+1. **Antigüedad de la última anotación: no estaba resuelto en spec.md, se
+   decide en esta fase.** El motor de recomendación (Fase 1) parte de un
+   `tInActual` que en el dashboard solo puede venir de la última anotación
+   manual — si es antigua, la recomendación se calcula sobre un `T_in` que
+   probablemente ya no es cierto, y eso no se detecta con solo mirar la
+   pantalla en un instante dado. Tres estados según antigüedad (función pura
+   `estadoAntiguedad()` en `src/ui/antiguedadAnotacion.js`, con `ahora`
+   como parámetro para poder testear con casos deterministas):
+   - `< 3 h` → **fresca**: se usa sin más.
+   - `3 h – 12 h` → **aviso**: se sigue usando (mejor una estimación con
+     aviso que nada), pero la tarjeta muestra "última anotación hace X,
+     puede estar desactualizada".
+   - `≥ 12 h` → **caducada**: no se calcula recomendación; mismo estado
+     vacío que "todavía no hay ninguna anotación", con el texto adaptado
+     ("última anotación hace X h — anota una nueva para ver
+     recomendaciones"). Coherente con la decisión ya tomada sobre el primer
+     arranque (no fabricar una recomendación sobre un dato que ya no
+     representa el estado real del piso).
+   - Umbrales elegidos como punto medio entre honestidad y usabilidad: 3h
+     cubre el caso normal de "llevo un rato sin mirar la app" sin generar
+     avisos constantes; 12h (media jornada) es lo bastante largo para no
+     penalizar a alguien que anota mañana/noche, pero lo bastante corto
+     porque en ese tiempo el interior puede haber cambiado varios grados
+     por sol/ventilación/calefacción sin que el modelo se entere. No hay
+     mecanismo para "retro-simular" T_in desde la anotación hasta ahora
+     (exigiría guardar histórico de cambios de estado de ventanas, que
+     esta fase no persiste — ver decisión 2 más abajo) — deliberadamente
+     fuera de alcance, se revisa si hace falta en una fase futura.
+
+2. **Las anotaciones etiquetadas (§3.5: cocinando/climatización/más gente)
+   sí se usan como `tInActual` para la recomendación en vivo, aunque se
+   excluyan de la recalibración automática de la Fase 7.** Son cosas
+   distintas: la exclusión de la recalibración es para no dejar que una
+   causa transitoria no modelada en el RC (un horno encendido, por
+   ejemplo) contamine la regresión de `UA`/capacidad térmica, que asume
+   que toda la desviación viene de la envolvente del piso. Pero como
+   lectura de "qué temperatura hay ahora mismo" es exactamente igual de
+   válida que una sin etiquetar — de hecho es la única lectura real
+   disponible en ese momento. Excluirla también aquí obligaría a caer a
+   una anotación sin etiquetar potencialmente mucho más antigua (o al
+   estado "caducada" de la decisión 1), lo cual sería estrictamente peor
+   para la decisión de abrir/cerrar ventana de ahora mismo.
+
+3. **`estadoVentanas.js`, módulo de persistencia nuevo (paralelo a
+   `piso.js`/`ubicacion.js`).** El estado físico real de cada ventana
+   (¿está abierta?, ¿persiana arriba?) no lo puede inferir el modelo — no
+   hay sensores — y sin embargo `recomendarVentana`/`recomendarPersiana`
+   (Fase 1) lo necesitan como `estadosVentanasActuales` para simular el
+   efecto conjunto de ambas ventanas sobre la única zona térmica. Se
+   declara a mano con un toggle por ventana en el dashboard y se persiste
+   bajo `solana:estadoVentanas`, keyed por `ventana.nombre` (no
+   hardcoded a "A"/"B") para no romper si en el futuro cambian los
+   nombres desde la pantalla de parámetros.
+
+4. **`index.html` pasa a montar el dashboard; la pantalla de parámetros se
+   muda a `parametros.html`.** El dashboard es la pantalla de uso diario
+   (spec.md §6, "elemento central"); parámetros es una pantalla de ajuste
+   ocasional. Sitio multi-página con Vite (sin router, coherente con la
+   decisión de Fase 4 de no añadir un framework), con un enlace cruzado
+   simple entre ambas. Al ser navegación de página completa, no hace falta
+   limpiar el `setInterval` del auto-refresco del dashboard al salir de
+   la pantalla — el documento entero se destruye.
+
+5. **Refresco del clima: automático cada 15 min (resolución de
+   `minutely_15`) + botón manual.** Sin service worker ni Notification
+   Triggers (fuera de alcance, spec.md §7) — es solo un `setInterval` en
+   la propia pantalla mientras está abierta, que vuelve a llamar a
+   `obtenerDatosReales()`.
+
+6. **Script de verificación visual (`scripts/captura-pantalla.mjs`)
+   committeado, no ad-hoc.** A diferencia de la Fase 4 (donde la
+   verificación con Playwright fue manual y no se guardó ningún script),
+   aquí se deja un script reutilizable y parametrizado (ruta + archivo de
+   salida) porque la Fase 6 (escena 3D) lo va a necesitar con mucha más
+   frecuencia — ya se anticipó al decidir dejar Playwright instalado en la
+   Fase 4. Espera a que el propio código marque `root.dataset.cargado =
+   'true'` tras renderizar (en vez de un timeout fijo o `networkidle`),
+   para no depender de asunciones de temporización de red.
