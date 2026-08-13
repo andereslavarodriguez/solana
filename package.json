@@ -13,6 +13,7 @@
     "suncalc": "^2.0.1"
   },
   "devDependencies": {
+    "playwright": "1.62.1",
     "vite": "^8.2.1"
   }
 }

@@ -299,3 +299,17 @@ Fase 5 — Dashboard (sin empezar)
    menor que `bandaConfort.max` (no basta con no ser mayor). Límites de
    `distanciaEdificioEnfrente` empiezan en 1 (no 0) para evitar dividir
    entre cero en `elevacionLimiteSombra()` (`src/model/sombra.js`).
+
+6. **`playwright` como devDependency permanente, versión fijada
+   (`1.62.1`, sin `^`).** Se usó de forma transitoria para verificar esta
+   fase en un Chromium real (pilotado contra el Chromium cacheado por
+   WSLg en `~/.cache/ms-playwright/`, ya que `chromium-cli` no está
+   disponible en este entorno) y se decidió dejarlo instalado en vez de
+   instalar/desinstalar en cada sesión: la Fase 6 (escena 3D) va a
+   necesitar verificación visual en navegador real con mucha más
+   frecuencia, y una instalación de npm en este entorno puede tardar
+   minutos de forma impredecible. Es una dependencia de desarrollo, no de
+   producción — no afecta al bundle de la PWA ni al requisito de "sin
+   backend" (spec.md §7). El binario del navegador en sí no se commitea
+   (vive fuera del repo, en `~/.cache/ms-playwright/`); cada máquina
+   nueva necesita `npx playwright install chromium` una vez.
