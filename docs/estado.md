@@ -366,6 +366,16 @@ Fase 6 — Escena 3D (sin empezar)
      (exigiría guardar histórico de cambios de estado de ventanas, que
      esta fase no persiste — ver decisión 2 más abajo) — deliberadamente
      fuera de alcance, se revisa si hace falta en una fase futura.
+   - **3h/12h son una estimación a ojo, no un valor derivado del modelo
+     térmico de este piso.** No se calcularon a partir de la constante de
+     tiempo real del RC (`C/UA`, con `C = capacidadTermica(parametrosPiso)`
+     de `src/model/termico.js`) ni de ningún dato de uso real — son un
+     punto de partida razonado cualitativamente (orden de magnitud del
+     horizonte de pronóstico de 6-8h, patrón de "anota mañana/noche") pero
+     sin base empírica. **Pendiente de ajustar con uso real** — cuando haya
+     histórico de anotaciones (Fase 7) vale la pena revisar si 3h/12h son
+     demasiado estrictos o demasiado laxos para este piso en concreto, o si
+     merece la pena derivarlos de `C/UA` en vez de dejarlos fijos.
 
 2. **Las anotaciones etiquetadas (§3.5: cocinando/climatización/más gente)
    sí se usan como `tInActual` para la recomendación en vivo, aunque se
@@ -391,6 +401,21 @@ Fase 6 — Escena 3D (sin empezar)
    bajo `solana:estadoVentanas`, keyed por `ventana.nombre` (no
    hardcoded a "A"/"B") para no romper si en el futuro cambian los
    nombres desde la pantalla de parámetros.
+
+   **Default antes de tocar ningún toggle (primer arranque):
+   `{ abierta: false, persianaArriba: false }` — elección consciente, no
+   el default implícito de un booleano.** Ventana cerrada + persiana
+   abajo es el único estado en el que `Q_solar` y `Q_vent` son ambos cero
+   (`termico.js`: `qSolarVentana` devuelve 0 si `!persianaArriba`,
+   `qVentVentana` devuelve 0 si `!abierta`) — es decir, es el punto de
+   partida térmicamente neutro: la primerísima recomendación que ve un
+   usuario nuevo (antes de corregir los toggles al estado real de su
+   piso) se basa solo en pérdidas por conducción (`UA·(T_out−T_in)`), sin
+   que el modelo asuma de entrada una ganancia solar o una ventilación
+   que igual no existen. Cualquier otro default (p.ej. persiana arriba)
+   arriesgaba mostrar una primera recomendación basada en una suposición
+   activa sobre el estado real de la ventana, no solo en ausencia de
+   información sobre él.
 
 4. **`index.html` pasa a montar el dashboard; la pantalla de parámetros se
    muda a `parametros.html`.** El dashboard es la pantalla de uso diario
