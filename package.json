@@ -1,0 +1,8 @@
+{
+  "name": "solana",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/model.test.js"
+  }
+}
