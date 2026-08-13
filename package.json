@@ -6,11 +6,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/model.test.js && node test/persistencia.test.js && node test/ubicacion.test.js && node test/validacion.test.js && node test/estadoVentanas.test.js && node test/antiguedadAnotacion.test.js",
+    "test": "node test/model.test.js && node test/persistencia.test.js && node test/ubicacion.test.js && node test/validacion.test.js && node test/estadoVentanas.test.js && node test/antiguedadAnotacion.test.js && node test/escena3d-geometria.test.js && node test/escena3d-iluminacion.test.js",
     "test:datos": "node test/datos-reales.test.js"
   },
   "dependencies": {
-    "suncalc": "^2.0.1"
+    "suncalc": "^2.0.1",
+    "three": "0.185.1"
   },
   "devDependencies": {
     "playwright": "1.62.1",

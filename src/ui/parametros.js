@@ -55,6 +55,11 @@ function plantilla(piso, ubicacion) {
         <h2>Piso</h2>
         ${campoNumerico('superficie', 'Superficie (m²)', piso.superficie, RANGOS.superficie, '0.5')}
         ${campoNumerico('alturaTecho', 'Altura de techo (m)', piso.alturaTecho, RANGOS.alturaTecho, '0.05')}
+        ${campoNumerico('anchoHabitacion', 'Ancho de la habitación (m)', piso.anchoHabitacion, RANGOS.anchoHabitacion, '0.1')}
+        <p class="nota">
+          Solo para la escena 3D: el lado perpendicular al eje de las dos ventanas.
+          La profundidad se calcula sola como superficie ÷ este ancho.
+        </p>
 
         <h2>Banda de confort</h2>
         ${campoNumerico('bandaConfortMin', 'Mínimo (°C)', piso.bandaConfort.min, RANGOS.bandaConfortMin, '0.5')}
@@ -132,6 +137,7 @@ function leerFormulario(form) {
   const piso = {
     superficie: campo('superficie'),
     alturaTecho: campo('alturaTecho'),
+    anchoHabitacion: campo('anchoHabitacion'),
     UA: campo('UA'),
     factorCapacidad: campo('factorCapacidad'),
     SHGC: campo('SHGC'),
@@ -155,6 +161,7 @@ function normalizarPiso(piso) {
   return {
     superficie: Number(piso.superficie),
     alturaTecho: Number(piso.alturaTecho),
+    anchoHabitacion: Number(piso.anchoHabitacion),
     UA: Number(piso.UA),
     factorCapacidad: Number(piso.factorCapacidad),
     SHGC: Number(piso.SHGC),

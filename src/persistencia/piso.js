@@ -16,6 +16,18 @@ const CLAVE = 'solana:parametrosPiso';
 export const PARAMETROS_PISO_POR_DEFECTO = {
   superficie: 30,
   alturaTecho: 2.5,
+  // Ancho lateral de la habitación (m), perpendicular al eje ventana A-B —
+  // parametrosPiso no tenía ninguna dimensión de planta, solo `superficie`
+  // total (spec.md §3.4, sin editor visual de planta en v1). La escena 3D
+  // (Fase 6) necesita separar esa área en ancho×profundidad para dibujar
+  // una caja, y en vez de inventar un ratio fijo en el código de la escena,
+  // se expone como parámetro editable aquí: profundidad se deriva siempre
+  // como `superficie / anchoHabitacion` (superficie sigue siendo la única
+  // fuente de verdad para la capacidad térmica en termico.js). Default
+  // 4.8m: con superficie=30 da una proporción ~1.3:1, verificada
+  // visualmente en el checkpoint 1 de la Fase 6 antes de exponerla como
+  // parámetro.
+  anchoHabitacion: 4.8,
   UA: 60,
   factorCapacidad: 6,
   SHGC: 0.6,

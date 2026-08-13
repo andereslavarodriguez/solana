@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-13 (Fase 5)
+Última actualización: 2026-08-13 (Fase 6, checkpoints 1-3)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -66,10 +66,33 @@ tenga sus tests/verificación pasando y esté commiteada.
   espera a `[data-cargado="true"]` en vez de un timeout fijo — comprobado
   a ojo en los estados sin anotación, con anotación, con toggles, con
   validación de rango y con fallo de red simulado.
+- **Fase 6 (checkpoints 1-3) — Escena 3D, en progreso.** `src/escena3d/`
+  (`geometria.js`, `iluminacion.js`, `escena.js`) con Three.js
+  (`0.185.1`, pinneada exacta como `playwright`), montada de forma
+  aislada en `escena3d.html`/`src/ui/main-escena3d.js` (no en el
+  dashboard todavía — eso es integración pendiente). Habitación como
+  caja rectangular con las dos ventanas de cristal completo (suelo a
+  techo) en paredes opuestas, marco en cruz + perimetral por ventana con
+  sombra 3D real (`castShadow`/`receiveShadow`, sol real vía
+  `posicionSolar` + `DirectionalLight`), cámara ortográfica fija estilo
+  Los Sims. El edificio enfrente y el parche de sol en el suelo se
+  probaron y se descartaron — detalle completo en "Decisiones tomadas".
+  Override de depuración `?debugHora=&debugNubes=&debugLluvia=` en
+  `escena3d.html` (banner "MODO DEBUG" visible), puramente visual — no
+  toca `localStorage`. 20 casos de prueba nuevos
+  (`test/escena3d-geometria.test.js`, `test/escena3d-iluminacion.test.js`),
+  integrados en `npm test`. Verificación visual con
+  `scripts/captura-escena3d.mjs` (mismo patrón que
+  `captura-pantalla.mjs`, con query string opcional para el override de
+  depuración).
 
 ## Fase actual
 
-Fase 6 — Escena 3D (sin empezar)
+Fase 6 — Escena 3D. Hechos los checkpoints 1-3 (geometría/cámara fija,
+marco de ventana con sombra real, sol real). Falta el checkpoint 4
+(nubes/lluvia) y, después, integrar la escena en `index.html` junto al
+dashboard (de momento vive aislada en `escena3d.html` para iterar sin
+mezclar con el checkpoint 5 de Fase 5).
 
 ## Fases
 
@@ -441,3 +464,179 @@ Fase 6 — Escena 3D (sin empezar)
    Fase 4. Espera a que el propio código marque `root.dataset.cargado =
    'true'` tras renderizar (en vez de un timeout fijo o `networkidle`),
    para no depender de asunciones de temporización de red.
+
+### Fase 6 — Escena 3D (checkpoints 1-3)
+
+1. **Habitación como caja rectangular, sin forma de planta real.**
+   `parametrosPiso` no tiene ancho/profundidad, solo `superficie` total
+   (editor visual de planta fuera de alcance en v1, spec.md §8). En vez de
+   inventar un ratio de aspecto fijo en el código de la escena (se probó
+   y se descartó — daba una proporción de "pasillo" con los valores por
+   defecto), se añadió `anchoHabitacion` como parámetro editable nuevo en
+   `parametrosPiso` (Parámetros del piso, no del modelo — no participa en
+   `termico.js`), con la profundidad derivada siempre como
+   `superficie / anchoHabitacion`. Validación cruzada nueva: ninguna
+   ventana puede ser más ancha que `anchoHabitacion`.
+
+2. **El edificio enfrente de cada ventana NO se dibuja en 3D — decisión
+   importante, dio bastantes vueltas.** Se probó primero como caja 3D a
+   distancia visual comprimida (con la altura calculada para preservar el
+   mismo `elevacionLimiteSombra()` real a esa distancia falsa). Se
+   descartó por dos motivos, en este orden:
+   - Su sombra 3D (shadow mapping real) no era fiable: con un sol muy
+     rasante, la sombra de la caja comprimida podía "sobrevolar" el suelo
+     de la habitación sin llegar a tocarlo, aunque el ángulo real sí
+     tapase la ventana según el modelo — al revés también podía pasar.
+   - Aunque se descartó el shadow mapping y se calculó "sol directo por
+     ventana" aparte con la fórmula real (ver decisión 4), el edificio
+     visual seguía sin aportar nada funcional y obligaba a la cámara a
+     alejarse mucho para que cupiera, dejando la habitación (el sujeto
+     real) diminuta en el encuadre.
+   `calcularElevacionesLimite()` (que solo exponía el ángulo límite real
+   de cada ventana, reutilizando `elevacionLimiteSombra()` sin la caja) se
+   añadió y se volvió a quitar en la misma sesión al eliminar también el
+   parche de sol (decisión 4) — no quedó ningún consumidor.
+
+3. **Cámara ortográfica fija, offset de 45° sobre la normal de la ventana
+   A.** Sin `OrbitControls` en ningún sitio (spec.md §6.1). Las paredes
+   opuestas de cristal (A y B) necesitan `side: THREE.DoubleSide` para que
+   la cámara vea ambas ventanas a la vez pese a estar en paredes opuestas
+   (una desde fuera de la caja, otra desde dentro) — sin esto, Three.js no
+   dibuja la cara "trasera" de una pared y una de las dos ventanas no se
+   vería nunca. El radio de encuadre de la cámara se calcula a partir de
+   la caja englobante real de toda la escena (`calcularRadioEscena`), no
+   de las dimensiones de la habitación a secas, para no tener que volver a
+   tocarlo si un checkpoint futuro añade más contenido.
+
+4. **Parche de sol en el suelo: se implementó y se quitó otra vez, pedido
+   explícito.** spec.md §6.1 pide literalmente "rayos de sol... en el
+   suelo", y se implementó (`ventanaTieneSolDirecto()` en
+   `iluminacion.js`, reutilizando `ventanaSombreada`/`cosIncidencia` de
+   `src/model` con los valores reales del piso — la misma condición que ya
+   usa `qSolarVentana` en `termico.js`). Se probaron varias iteraciones de
+   opacidad/tamaño y se acabó quitando del todo porque, visualmente, no
+   encajaba ("parecía una antisombra"). **La escena 3D ya no tiene ninguna
+   señal visual de "esta ventana tiene sol directo ahora mismo"** más allá
+   de la luz/sombra generales — esa información sigue disponible en el
+   dashboard (Fase 5) en texto. Diverge de spec.md §6.1 a propósito; si se
+   echa en falta más adelante, reconsiderar como un paralelogramo
+   inclinado según el ángulo real del sol (opción descartada esta vez por
+   tiempo/alcance) en vez del rectángulo genérico que se probó.
+
+5. **Sombra 3D real (shadow mapping de Three.js) solo para el marco de la
+   ventana y las paredes opacas — NUNCA para el edificio (retirado).** El
+   marco (`construirMarcoVentana`: cruz central + perimetral, 4 cristales
+   independientes por ventana) y las paredes opacas están a escala 1:1
+   real, así que su sombra es geométricamente fiable sin cálculo aparte.
+   El cristal nunca proyecta sombra (`castShadow`) — si lo hiciera, no
+   entraría sol nunca por esa ventana.
+
+6. **Dos bugs reales de Three.js que costó encontrar, por si se repiten
+   en checkpoints futuros:**
+   - `light.shadow.camera.near/far/left/right/top/bottom` mutados
+     directamente **no tienen ningún efecto** si no se llama después a
+     `light.shadow.camera.updateProjectionMatrix()` — Three.js no lo hace
+     solo. Sin esto, la sombra usaba el frustum por defecto (near/far muy
+     separados) y no aparecía nunca, ni en software rendering ni con GPU
+     real.
+   - El suelo (`construirQuadPlano`, 2 triángulos formando un quad)
+     necesita geometría **indexada de verdad** (`setIndex`), no 6 vértices
+     sueltos duplicados en dos triángulos separados — con vértices
+     duplicados (aunque con la misma normal calculada) se veía una
+     costura diagonal de esquina a esquina, con iluminación ligeramente
+     distinta a cada lado, más visible cuanto más contraste de luz/sombra
+     había. Con índice de verdad ambos triángulos comparten el mismo
+     vértice en memoria y no puede desalinearse.
+   - Relacionado: la normal del suelo **no se puede fijar a mano**
+     (`(0,1,0)`) con un material `DoubleSide` — el shader invierte la
+     normal recibida según de qué lado se ve cada triángulo (comparando
+     contra el sentido de bobinado); una normal fija que no coincide con
+     ese criterio se ve invertida desde arriba, y la superficie recibía
+     casi solo luz ambiental, sin apenas contraste de la direccional.
+     Hay que usar `computeVertexNormals()` (que sí calcula a partir del
+     bobinado real) sobre la geometría ya indexada.
+
+7. **Paredes opacas: NO llevan `depthWrite:false`, aunque el cristal sí.**
+   `depthWrite:false` en las paredes opacas (probado) mezclaba sus dos
+   caras (`DoubleSide`) entre sí en el borde de silueta contra el fondo,
+   en ángulos rasantes — se veía como un contorno fino de un tono
+   intermedio en la base de cada pared. El cristal sí lo necesita
+   (`depthWrite:false`) porque sus reflejos/marco hijos son decals
+   coincidentes en el mismo plano (ver decisión 9) y sin esto se pelean
+   por profundidad con la propia pared.
+
+8. **Opacidad de las paredes opacas: distinta la cercana de la del
+   fondo, y con bastante historial.** Se probó 0.5, luego 0.85, luego
+   opaca del todo (1) para eliminar de raíz tres problemas que causó la
+   transparencia por turnos (lavado del color del suelo en la línea de
+   visión a través de la pared, lío de profundidad con los reflejos del
+   cristal contiguo, contorno de mezcla en el borde de silueta — este
+   último inherente a cualquier opacidad menor que 1, no arreglable con
+   `depthWrite`). Pedido explícito de recuperar algo de transparencia
+   sobre todo en la pared **más cercana a la cámara** (para poder ver el
+   interior): valores finales `OPACIDAD_PARED_OPACA_CERCA = 0.6`,
+   `OPACIDAD_PARED_OPACA_LEJOS = 0.95`, decididos con `signoHaciaCamara()`
+   (ya existente para los reflejos, reutilizado aquí).
+
+9. **Reflejos de cristal (franjas blancas diagonales, una por cada uno de
+   los 4 cristales que deja el marco en cruz): el offset de profundidad
+   dio más vueltas que ningún otro elemento.** Al ser decals coincidentes
+   en el mismo plano que el propio cristal, se probaron tres técnicas en
+   orden, cada una con un problema real distinto:
+   - `depthTest:false` → el reflejo se dibuja siempre por encima de todo,
+     incluida cualquier pared que debiera taparlo ("flotando" delante).
+   - `polygonOffset` → falla en ángulos rasantes cerca de las esquinas del
+     cristal (donde converge con el borde de la pared lateral contigua),
+     dejando un rastro fantasma sobre la pared opaca.
+   - **Offset de posición real en Z, con signo dinámico** (ganador): como
+     A y B se ven cada una desde un lado distinto del cristal (una desde
+     fuera de la caja, otra desde dentro, por `lookAt()`), el signo del
+     offset no puede ser fijo — `signoHaciaCamara(pared, dirCamaraXZ)`
+     (calculado ANTES de construir la cámara real, con la misma fórmula
+     de azimut) decide hacia qué lado desplazarse en cada pared. Un
+     intento intermedio de alejar los reflejos del centro de cada
+     cuadrante (para evitar el problema de esquina de la técnica
+     anterior) resultó innecesario con el offset real, y además
+     descentraba visualmente los reflejos — se revirtió.
+
+10. **Techo invisible que sí proyecta sombra.** `opacity:0` +
+    `transparent:true`, NO `visible:false` — Three.js excluye del pase de
+    sombra por completo cualquier objeto con `visible:false`, así que
+    tiene que seguir "visible" para la cámara de sombra y desaparecer
+    solo por opacidad. Efecto esperado, comprobado y no es un bug: limita
+    mucho cuánto suelo puede recibir sol directo (un punto a más
+    profundidad que `altura/tan(elevación_solar)` desde la ventana queda
+    "bajo techo" — el rayo de vuelta al sol saldría por el techo antes que
+    por la ventana). Es el mismo efecto que en una habitación real con
+    techo.
+
+11. **`renderer.shadowMap.type`: `PCFShadowMap`, no `VSMShadowMap`.** Se
+    probó VSM buscando sombras más suaves (con `luz.shadow.radius`) y la
+    sombra dejó de verse por completo, confirmado por el usuario en un
+    navegador con GPU real — no se pudo verificar VSM en este entorno de
+    desarrollo antes de cambiarlo, lección aprendida: no cambiar algo ya
+    confirmado que funciona (`PCFShadowMap`) por una alternativa sin
+    poder probarla primero. `PCFShadowMap` también respeta
+    `shadow.radius`, así que no se perdió del todo el objetivo de sombras
+    más suaves.
+
+12. **Reflejo de entorno en el cristal: `envMap` por material, nunca
+    `scene.environment` global.** Pedido explícito de mejoras de realismo
+    razonables (sombras más suaves, brillo especular, reflejo de entorno)
+    sin salirse del estilo "cálido y hogareño" ni añadir texturas
+    externas (CLAUDE.md, "sin servidor"). El entorno se genera
+    proceduralmente (`crearEntornoProcedural`: una esfera con degradado
+    de color propio — cálido arriba, terroso abajo — horneada con
+    `PMREMGenerator`, sin ninguna textura descargada) y se pasa como
+    `envMap` solo al material del cristal. Se probó `scene.environment`
+    (afecta a TODOS los materiales PBR de la escena) y lavaba por
+    completo el contraste de luz/sombra ya conseguido en el suelo y las
+    paredes opacas.
+
+13. **`escena3d.html` sigue aislada del dashboard — la integración en
+    `index.html` es checkpoint pendiente, no de esta sesión.** Motivo
+    original (Fase 5): `dashboard.js` reescribe `innerHTML` en cada
+    render (toggles, anotaciones), lo que destruiría el canvas WebGL si
+    la escena viviera dentro de ese mismo contenedor — hay que decidir
+    cómo mantener la escena 3D fuera del ciclo de re-render del
+    dashboard antes de integrarla.

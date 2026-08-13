@@ -10,6 +10,7 @@
 export const RANGOS = {
   superficie: { min: 5, max: 200 },
   alturaTecho: { min: 2.0, max: 4.0 },
+  anchoHabitacion: { min: 2, max: 15 },
   UA: { min: 5, max: 300 },
   factorCapacidad: { min: 1, max: 20 },
   SHGC: { min: 0, max: 1 },
@@ -49,6 +50,7 @@ export function validarParametrosPiso(datos) {
 
   validarCampo(errores, 'superficie', datos.superficie, RANGOS.superficie);
   validarCampo(errores, 'alturaTecho', datos.alturaTecho, RANGOS.alturaTecho);
+  validarCampo(errores, 'anchoHabitacion', datos.anchoHabitacion, RANGOS.anchoHabitacion);
   validarCampo(errores, 'UA', datos.UA, RANGOS.UA);
   validarCampo(errores, 'factorCapacidad', datos.factorCapacidad, RANGOS.factorCapacidad);
   validarCampo(errores, 'SHGC', datos.SHGC, RANGOS.SHGC);
@@ -78,6 +80,19 @@ export function validarParametrosPiso(datos) {
       RANGOS.distanciaEdificioEnfrente,
     );
   });
+
+  // La ventana no puede ser más ancha que la propia pared que la contiene
+  // (geometria.js, Fase 6, dibuja el hueco de cristal dentro de esa pared).
+  const anchosVentanaValidos = (datos.ventanas || []).every(
+    (_, i) => !errores[`ventanas.${i}.ancho`],
+  );
+  if (!errores.anchoHabitacion && anchosVentanaValidos) {
+    (datos.ventanas || []).forEach((ventana, i) => {
+      if (Number(ventana.ancho) >= Number(datos.anchoHabitacion)) {
+        errores[`ventanas.${i}.ancho`] = 'Debe ser menor que el ancho de la habitación';
+      }
+    });
+  }
 
   return { valido: Object.keys(errores).length === 0, errores };
 }

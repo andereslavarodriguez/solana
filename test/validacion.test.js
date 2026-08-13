@@ -103,6 +103,27 @@ caso('ventana con distancia a edificio = 0 -> inválido (evita división por cer
   assert.equal(errores['ventanas.0.distanciaEdificioEnfrente'], `Debe estar entre ${RANGOS.distanciaEdificioEnfrente.min} y ${RANGOS.distanciaEdificioEnfrente.max}`);
 });
 
+caso('anchoHabitacion fuera de rango -> inválido con error en "anchoHabitacion"', () => {
+  const datos = { ...PARAMETROS_PISO_POR_DEFECTO, anchoHabitacion: 1 };
+  const { valido, errores } = validarParametrosPiso(datos);
+  assert.equal(valido, false);
+  assert.equal(errores.anchoHabitacion, `Debe estar entre ${RANGOS.anchoHabitacion.min} y ${RANGOS.anchoHabitacion.max}`);
+});
+
+caso('ventana más ancha que anchoHabitacion -> inválido con error en "ventanas.0.ancho"', () => {
+  const datos = {
+    ...PARAMETROS_PISO_POR_DEFECTO,
+    anchoHabitacion: 3,
+    ventanas: [
+      { ...PARAMETROS_PISO_POR_DEFECTO.ventanas[0], ancho: 4 },
+      PARAMETROS_PISO_POR_DEFECTO.ventanas[1],
+    ],
+  };
+  const { valido, errores } = validarParametrosPiso(datos);
+  assert.equal(valido, false);
+  assert.equal(errores['ventanas.0.ancho'], 'Debe ser menor que el ancho de la habitación');
+});
+
 console.log('\n--- validarUbicacion (§3.1) ---');
 
 caso('UBICACION_PISO por defecto -> válido', () => {

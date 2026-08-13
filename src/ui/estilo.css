@@ -32,6 +32,29 @@ body {
   padding: 1.5rem 1rem 4rem;
 }
 
+#escena3d {
+  width: 100vw;
+  height: 100vh;
+}
+
+#escena3d canvas {
+  display: block;
+}
+
+#banner-debug {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--error);
+  color: #fff;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.4rem;
+}
+
 h1 {
   font-weight: 500;
   font-size: 1.6rem;
