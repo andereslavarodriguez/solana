@@ -1,6 +1,7 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-13 (Fase 6, checkpoints 1-3)
+Última actualización: 2026-08-15 (Fase 6, checkpoints 1-23, confirmados
+a ojo por el usuario y commiteados)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -66,7 +67,7 @@ tenga sus tests/verificación pasando y esté commiteada.
   espera a `[data-cargado="true"]` en vez de un timeout fijo — comprobado
   a ojo en los estados sin anotación, con anotación, con toggles, con
   validación de rango y con fallo de red simulado.
-- **Fase 6 (checkpoints 1-3) — Escena 3D, en progreso.** `src/escena3d/`
+- **Fase 6 (checkpoints 1-8) — Escena 3D, en progreso.** `src/escena3d/`
   (`geometria.js`, `iluminacion.js`, `escena.js`) con Three.js
   (`0.185.1`, pinneada exacta como `playwright`), montada de forma
   aislada en `escena3d.html`/`src/ui/main-escena3d.js` (no en el
@@ -75,24 +76,168 @@ tenga sus tests/verificación pasando y esté commiteada.
   techo) en paredes opuestas, marco en cruz + perimetral por ventana con
   sombra 3D real (`castShadow`/`receiveShadow`, sol real vía
   `posicionSolar` + `DirectionalLight`), cámara ortográfica fija estilo
-  Los Sims. El edificio enfrente y el parche de sol en el suelo se
-  probaron y se descartaron — detalle completo en "Decisiones tomadas".
-  Override de depuración `?debugHora=&debugNubes=&debugLluvia=` en
-  `escena3d.html` (banner "MODO DEBUG" visible), puramente visual — no
-  toca `localStorage`. 20 casos de prueba nuevos
-  (`test/escena3d-geometria.test.js`, `test/escena3d-iluminacion.test.js`),
-  integrados en `npm test`. Verificación visual con
-  `scripts/captura-escena3d.mjs` (mismo patrón que
-  `captura-pantalla.mjs`, con query string opcional para el override de
-  depuración).
+  Los Sims (con composición distinta en retrato para móvil). El edificio
+  enfrente y el parche de sol en el suelo se probaron y se descartaron —
+  detalle completo en "Decisiones tomadas". Nubes (cúmulos de sprites con
+  textura procedural, cantidad variable según nubosidad, con deriva y
+  algo de aleatoriedad entre cargas), lluvia (partículas pequeñas
+  cayendo rápido y en vertical, densidad+velocidad reales, sin
+  agrupamientos), tormenta con dato real de Open-Meteo (`weather_code`,
+  no una heurística) con rayos, noche (cielo y luz oscurecen según
+  elevación solar real, reflejo de cristal atenuado también de noche) y
+  viento (polvo en suspensión con trayectoria turbulenta + estela +
+  alguna hoja, dirección/velocidad reales) — con bucle de animación
+  (`requestAnimationFrame`, pausado en pestaña oculta) que revierte la
+  decisión inicial de escena estática, a petición expresa del usuario.
+  **La habitación ya no está sobre un suelo plano infinito: flota en una
+  isla** (cono invertido de tierra con rocas + tapa de hierba), con un
+  árbol simple detrás y un charco que crece durante la lluvia; el cielo
+  es un degradado horizonte↔cénit que también evoluciona con la hora y la
+  nubosidad. Override de depuración
+  `?debugHora=&debugNubes=&debugLluvia=&debugViento=&debugVientoDir=&debugCodigoTiempo=`
+  en `escena3d.html` (banner "MODO DEBUG" visible, con un panel para
+  rellenar esos mismos parámetros a mano sin editar la URL), puramente
+  visual — no toca `localStorage`. 20 casos de prueba puros
+  (`test/escena3d-geometria.test.js`, `test/escena3d-iluminacion.test.js`,
+  sin casos nuevos para nubes/lluvia/noche/rayos/viento/isla — viven en
+  `escena.js`, la capa impura, verificada visualmente igual que el resto
+  del fichero), integrados en `npm test`. Verificación visual con
+  `scripts/captura-escena3d.mjs` (mismo patrón que `captura-pantalla.mjs`,
+  con espera opcional en ms para capturar la animación en marcha, y
+  viewport opcional para verificar el layout de móvil).
 
 ## Fase actual
 
-Fase 6 — Escena 3D. Hechos los checkpoints 1-3 (geometría/cámara fija,
-marco de ventana con sombra real, sol real). Falta el checkpoint 4
-(nubes/lluvia) y, después, integrar la escena en `index.html` junto al
-dashboard (de momento vive aislada en `escena3d.html` para iterar sin
-mezclar con el checkpoint 5 de Fase 5).
+Fase 6 — Escena 3D. Hechos los checkpoints 1-23: geometría/cámara fija,
+marco de ventana con sombra real, sol real, nubes/lluvia/noche/rayos con
+animación, composición de cámara para móvil en retrato (5); lluvia por
+partículas realista, tormenta con dato real de Open-Meteo, nubes con
+cantidad variable y algo de aleatoriedad, polvo en suspensión según el
+viento real (6); reflejo de cristal atenuado de noche, viento más
+visible, cielo con degradado (7); la habitación flota en una isla (cono
+invertido de tierra con rocas, tapa de hierba), con árbol, charco y
+viento con estela (8); ajustes de zoom/forma/buzón/lluvia/cielo (9);
+bugs de posición y texturas (10); isla más grande, hierba más verde,
+buzón en esquina, muro sin huecos, barro con contorno, filamentos con
+viento (11); contraste de lluvia, barro 3D real, más piedras sin
+superar la altura de la casa, "peter-panning" corregido en las sombras
+(12); y checkpoint 13: **agujeros de barro que ya no pueden aparecer
+dentro de la casa** (se convirtieron en toperas de verdad, mucho más
+pequeñas), cielo nublado con un azul-gris agradable en vez del gris
+morado feo de antes, piedras del muro que llegan hasta el borde real de
+la isla sin dejar hierba visible después, y el campo de hora del panel
+de depuración pasó de texto ISO escrito a mano a un selector nativo de
+fecha/hora. Implementado y verificado a fondo por Claude con capturas
+reales (incluidas varias rondas de bugs encontrados y corregidos, y en
+el checkpoint 13 verificación específica en 4 cargas de página distintas
+para confirmar que la exclusión de agujeros dentro de la casa es fiable
+pese a ser aleatoria — ver "Decisiones tomadas"); y checkpoint 14: los
+filamentos de hierba reciben la misma exclusión de la huella de la casa
+que las toperas, el muro de piedras del borde ya no deja huecos, la
+noche (despejada y nublada) usa tonos más cálidos, y una farola nueva
+en la esquina de la casa contraria al árbol da un punto de luz cálida
+con sombra real, encendida solo de noche; y checkpoint 15: la isla se
+encogió para permitir más zoom, la farola pasó a ser proporcional a la
+altura real de la casa (y siempre más alta que ella) con un bug de
+autosombra encontrado y corregido por el camino, el cielo azul se hizo
+más vivo (pensando en que será el fondo de toda la app), el polvo en
+suspensión ya alcanza la franja alta de cielo en el layout de móvil en
+retrato, el propio polvo se atenúa de noche (antes "parecía luciérnagas")
+y la farola también se enciende con más de un 75% de nubes, no solo de
+noche. Implementado y verificado a fondo por Claude con capturas reales
+(incluidas varias rondas de bugs encontrados y corregidos — el primer
+diseño de la farola apuntaba al centro de la casa y el haz se colaba en
+diagonal por el techo invisible, y ya escalada proporcionalmente se
+autosombreaba una cuña sobre su propio charco de luz, ver "Decisiones
+tomadas"); y checkpoint 16: la farola creció otro 50% y se movió al
+centro de la ventana trasera (ya no una esquina), con el brazo/pantalla
+reconstruidos como una pieza diagonal de verdad (antes quedaban
+flotando, sin tocar el poste ni la pantalla) y la sombra del poste
+reactivada; más zoom en toda la escena, aprovechando además un bug real
+encontrado y corregido en el encuadre de retrato (móvil) que aplastaba
+verticalmente la isla sin que nadie lo hubiera pedido así — confirmando
+la sospecha del usuario. Implementado y verificado a fondo por Claude
+con capturas reales (incluidas varias rondas de bugs encontrados y
+corregidos — la farola agrandada quedó primero pegada al cristal de la
+ventana, y el brazo/pantalla/poste originales no llegaban a tocarse
+entre sí, ver "Decisiones tomadas"); y checkpoint 17: la farola tipo
+"cobra" (checkpoints 14-16) se sustituyó por completo por una farola
+vintage más baja — poste corto sin brazo, farolillo con cristal cálido
+y una luz PUNTUAL (no un foco dirigido) que se reparte alrededor suyo en
+vez de concentrarse en un círculo hacia abajo, pensada explícitamente
+para reducir la zona oscura que dejaba el diseño anterior. Pedido
+explícito de probar primero con una sola antes de decidir si hacen
+falta dos (mover el árbol y añadir una segunda en la esquina opuesta) —
+**decisión pendiente del usuario tras ver esta primera versión**, ver
+"Decisiones tomadas". Implementado y verificado con capturas reales de
+día y de noche; y checkpoint 18 ("mejor" — confirmado por el usuario,
+seguimos con una sola farola por ahora): reposicionada a la esquina del
+tejado más opuesta a la cámara (antes en medio de la ventana trasera,
+para ver si así alumbraba más), y el farolillo pasó de una caja de
+cristal lisa a un farol de verdad con cuatro varillas metálicas en las
+esquinas. Claude propuso (sin implementar, pedido explícito de "solo
+proponlo") varias formas baratas de iluminar el resto de la isla — ver
+"Decisiones tomadas" para la lista, pendiente de que el usuario elija
+alguna; y checkpoint 19 (el usuario eligió el farolillo colgado del
+árbol de esa lista): la farola volvió a la ventana trasera (la esquina
+del checkpoint 18 no compensaba lo suficiente), sus varillas metálicas
+dejaron de proyectar sombra sobre su propio charco de luz, se añadió un
+farolillo colgado de una cuerda en el árbol (con su propio punto de luz
+cálido) y una `HemisphereLight` tenue de noche; y la luna real (fase,
+no posición — calculada con SunCalc vía `src/data/luna.js`, módulo
+nuevo) sale en el cielo con su forma real (nueva/creciente/llena) junto
+con estrellas cuya cantidad depende de cuánto alumbre la luna, con dos
+rondas serias de bugs de posicionamiento y de forma encontrados y
+corregidos por el camino (ver "Decisiones tomadas" — la luna no
+aparecía en ninguna captura al principio, y cuando apareció tenía la
+fase invertida: nueva se veía llena y viceversa); y checkpoint 20 (una
+ronda entera de retoques finos tras ver el checkpoint 19 en vivo): la
+luna, mucho más pequeña y más arriba, dejó de verse "enorme en medio de
+la pantalla"; un cuadrado blanco visible alrededor del disco y luego un
+anillo brillante en su borde, dos bugs reales distintos del mismo
+degradado de halo, corregidos por turnos; las estrellas, que solo
+salían en el lado izquierdo, ahora se reparten también a la derecha y
+con más densidad arriba (donde hay menos luz); y la sombra "mal" de la
+farola resultó no ser de las varillas (ya arregladas en el checkpoint
+19) sino del propio poste, coaxial con el foco — arreglado también. Ver
+"Decisiones tomadas" para el diagnóstico completo de cada bug, todos
+confirmados con captura real antes y después; y checkpoint 21 (el
+usuario reportó que varios de los arreglos del checkpoint 20 no se
+notaban todavía — cierto para algunos, ver "Decisiones tomadas" para
+el detalle de cada uno): la luna dejó de
+mostrar un tinte blanco en su lado oscuro (bug real del halo, distinto
+del cuadrado/anillo ya arreglados), las estrellas bajaron de tamaño y
+densidad y ganaron variación de tamaño/brillo con más brillo cuanto más
+arriba, se encontró y arregló una "shadow acne" seria en toda la escena
+a sol rasante (bias/normalBias desactualizados desde que la farola
+creció en checkpoints posteriores al ajuste original), y la farola se
+alejó de la ventana y creció otro 20%; y checkpoint 22 (la farola en sí
+"no estaba quedando muy bien" — sustitución completa de diseño, no un
+ajuste más): la farola tipo "vintage" (checkpoints 17-21, con
+base/farolillo propio/varillas/remate) se sustituyó por un poste en
+forma de horca del que cuelga el MISMO farolillo que ya usa el árbol
+(un helper nuevo, `construirFarolilloColgante`, compartido entre los
+dos), plantado en la hierba en vez de junto al muro de piedras. Ver
+"Decisiones tomadas" para el diagnóstico completo de cada bug (incluido
+uno real en la orientación del brazo de la horca, encontrado y
+corregido en la propia sesión), todos confirmados con captura real
+antes y después; y checkpoint 23 (el diseño en sí de la horca de
+madera "no era lo que buscaba" — otra sustitución de diseño, no un
+ajuste de tamaño/posición sobre el anterior): tres tablas planas de
+madera (vertical + horizontal + diagonal de refuerzo, en vez de los
+cilindros de metal del checkpoint 22) formando un triángulo real,
+pequeño, tipo soporte de cartel de jardín, con el mismo farolillo
+colgado del borde de la tabla horizontal; agrandado un 50% y
+reposicionado, primero a un lado del centro de la ventana (con la
+casa tapándolo parcialmente, pedido explícito de arreglarlo) y
+finalmente a la esquina real de la casa simétrica al árbol (misma
+técnica de "esquina más opuesta según `perp`" que ya usa el propio
+árbol para su posición). **Confirmado a ojo por el usuario.**
+Implementado y verificado a fondo con capturas reales en cada paso, ver
+"Decisiones tomadas" para el detalle completo. Integrar la escena en
+`index.html` junto al dashboard queda como próximo paso (de momento
+vive aislada en `escena3d.html` para iterar sin mezclar con el
+checkpoint de integración de Fase 5).
 
 ## Fases
 
@@ -640,3 +785,1574 @@ mezclar con el checkpoint 5 de Fase 5).
     la escena viviera dentro de ese mismo contenedor — hay que decidir
     cómo mantener la escena 3D fuera del ciclo de re-render del
     dashboard antes de integrarla.
+
+### Fase 6 — Escena 3D (checkpoint 5: nubes/lluvia/noche/rayos + móvil)
+
+Pedido explícito del usuario tras ver el checkpoint 4 en vivo ("las
+representaciones... tendría que ser más realista, haz unas animaciones y
+unas nubes más bonitas que 4 círculos. que la lluvia caiga
+proporcionalmente a los mm que hay. y si hay tormenta que caigan rayos. y
+si es de noche que se haga oscura toda la pantalla... en el móvil la app
+será vertical, pon la casa abajo y que en la parte superior se vea el
+clima"), con la condición "solo si es barato" — cada pieza se implementó
+con el recurso más simple posible dentro del estilo ya establecido
+(sprites/canvas procedural, heurísticas sobre datos ya disponibles), no
+con librerías o assets nuevos.
+
+1. **Bucle de animación continuo (`requestAnimationFrame`), revierte la
+   decisión de la Fase 5/checkpoint 4 de escena estática.** Aquella
+   decisión (sin animación, un único render por carga/cambio de datos) fue
+   explícitamente por batería en un PWA de móvil — sigue siendo la razón
+   por la que el bucle se pausa con `document.visibilitychange` cuando la
+   pestaña pasa a segundo plano (mitigación barata, no una reconsideración
+   de si merece la pena el bucle en sí). Reloj propio con
+   `performance.now()` en vez de `THREE.Clock` — esta versión de Three.js
+   (`0.185.1`) lo marca deprecado en favor de `THREE.Timer`, y para lo que
+   hace falta aquí (pausar/retomar) un par de líneas a mano es más simple
+   que adoptar esa API nueva.
+
+2. **Nubes: cúmulos de 5 `THREE.Sprite` con textura radial generada en
+   `<canvas>`, no círculos planos — y con DOS tonos, no uno.** Sprite en
+   vez de plano con `lookAt()` manual porque Three.js ya orienta un Sprite
+   hacia la cámara (billboard nativo) sin repetir el truco de
+   `construirLluvia`. El primer intento con un solo tono crema
+   (`COLOR_NUBE`) salió casi invisible: el fondo del cielo (`COLOR_FONDO`)
+   es un crema muy parecido, así que a la opacidad de una nube real casi
+   no había contraste. Se añadió una capa de "sombra" gris-cálida
+   (`COLOR_NUBE_SOMBRA`), más grande (1.12x) y desplazada hacia abajo,
+   DEBAJO de los puffs blancos — con `renderOrder` explícito para
+   garantizar el orden (dos sprites transparentes casi coplanares pueden
+   ordenarse por distancia a cámara de forma ambigua). El resultado da
+   volumen real a la nube (borde inferior sombreado) en vez de un blanco
+   plano.
+
+3. **`alturaNubes` subió de 0.95×radio (checkpoint 4) a 1.15×radio.** La
+   capa de sombra del punto 2, al ser más grande y desplazada hacia abajo
+   que los puffs blancos, hizo que el cúmulo más cercano volviera a rozar
+   el vértice del tejado con la altura ya confirmada del checkpoint 4 —
+   mismo síntoma que entonces (mancha mezclada con la pared), reajustado
+   con el mismo método (capturas de color plano a opacidad 1 para ver el
+   solape real sin ambigüedad de mezcla).
+
+4. **Deriva lateral de las nubes: amplitud pequeña (0.06×radio) a
+   propósito.** Un balanceo suave, no las nubes cruzando la pantalla — ni
+   por tono (CLAUDE.md pide "tranquilo") ni por seguridad (con más
+   amplitud, el cúmulo más cercano al tejado volvería a rozarlo en el
+   extremo del movimiento, mismo problema del punto 3). Verificado con una
+   captura a los 3s de animación, no solo en el instante inicial.
+
+5. **Lluvia: cae de verdad, en bucle (`envolver()`), con velocidad Y
+   densidad proporcionales a los mm — bug real encontrado y corregido en
+   el reparto de fase inicial.** El primer intento derivaba la posición
+   inicial (`y0`) de cada franja del mismo `OFFSETS_LLUVIA.z` que ya usaba
+   el checkpoint 4 para el offset horizontal — eso las agrupaba en una
+   banda estrecha del rango total de caída, así que las 8 franjas caían y
+   desaparecían del encuadre casi a la vez, dejando la escena vacía varios
+   segundos hasta que volvían a aparecer arriba (visible al comparar
+   capturas en t=0/1.5s/3s, no en una sola captura estática). Se corrigió
+   repartiendo `y0` de forma uniforme a lo largo de todo el rango según el
+   índice de cada franja, con el offset de `OFFSETS_LLUVIA.z` reducido a
+   un jitter pequeño encima. La velocidad de caída también bajó de
+   0.5×radio/s a 0.12×radio/s — a la primera velocidad cada franja
+   completaba su bucle en ~1.3s, con más aspecto de ventisca que de
+   lluvia tranquila.
+
+6. **Rayos: heurística sobre datos ya existentes, no un dato real de
+   tormenta.** Open-Meteo tiene `weathercode` (incluye códigos de
+   tormenta), pero pedirlo sería tocar `src/data/openMeteo.js` /
+   `adaptador.js` (Fase 2, con su propia decisión de qué variables pedir)
+   por una función de la escena de depuración — fuera de alcance de este
+   checkpoint. `hayTormenta()` aproxima con lo que ya hay: llueve fuerte
+   (≥4mm) Y está muy nublado (≥75%). **Pendiente de revisar si se integra
+   `weathercode` de verdad más adelante.**
+
+7. **El rayo dio más vueltas que ningún otro elemento del checkpoint —
+   tres bugs reales encontrados por turnos, cada uno diagnosticado con la
+   misma técnica de aislar con color/opacidad forzados ya usada para las
+   nubes en el checkpoint 4:**
+   - Fórmula del pulso de parpadeo con `-x ** 2` sin paréntesis: `SyntaxError`
+     en tiempo de carga (unario antes de `**` no es válido en JS) — rompía
+     la página entera, no solo el rayo. Detectado enseguida porque
+     `captura-escena3d.mjs` sí falla el proceso ante errores de consola,
+     no solo ante timeouts.
+   - Con la fórmula ya corregida, el rayo estaba geométricamente colocado
+     bien pero era invisible: el diagnóstico con color rojo/opacidad 1
+     forzados mostró que SÍ se dibujaba, en la posición correcta — el
+     problema real era que los puffs blancos de nube (`renderOrder=1`)
+     tapaban SIEMPRE al rayo (`renderOrder` por defecto, 0) por estar
+     espacialmente cerca del cúmulo, independientemente de la profundidad
+     real. Se arregló con `linea.renderOrder = 2`.
+   - Ya visible en la posición correcta, seguía leyéndose casi invisible
+     con su color original (`0xfdf8ec`, crema): mismo problema de bajo
+     contraste que las nubes del checkpoint 4, esta vez en el rayo en vez
+     de en la altura — se mezclaba con el blanco de las nubes contiguas.
+     Cambiado a un azul-blanco eléctrico (`0xbcd9ff`), con más contraste
+     tanto contra las nubes blancas como contra el cielo (crema de día,
+     azul-morado de noche).
+   - Además, el rango vertical del rayo (pensado al principio para "caer"
+     desde la nube hasta cerca del suelo, `0.25×radio` a `0.9×radio`, y
+     luego `0.95×radio` a `1.35×radio`) quedaba mayormente fuera del
+     frustum vertical de la cámara (con la cámara inclinada 35°, el límite
+     real no es un cálculo directo desde `alcanceVertical`) o detrás de la
+     geometría opaca de la habitación. Se resolvió sin seguir tanteando el
+     límite exacto: el rayo se confina dentro de la misma franja vertical
+     ya validada para las nubes (`alturaNubes`, 1.15×radio, ±0.13), como
+     un relámpago dentro/junto a la nube en vez de una caída larga hacia
+     el suelo — coherente además con no romper el tono tranquilo con un
+     rayo "entrando" en el salón.
+   - Curva de parpadeo también rediseñada: el primer intento (dos
+     gaussianas superpuestas buscando un "doble parpadeo") decaía tan
+     rápido que a los 100ms de empezar el flash la opacidad ya bajaba de
+     0.02 — invisible en la práctica la mayor parte de su propia duración.
+     Sustituida por una subida rápida (15% de la duración) y bajada
+     lineal el resto, más simple y con opacidad realmente visible durante
+     casi toda la ventana de `DURACION_FLASH` (subida a 0.6s).
+   - De día el rayo es apenas perceptible (buen contraste solo contra el
+     cielo oscuro de noche) — aceptado tal cual: es coherente con cómo se
+     ve un rayo real a plena luz del día, y añadir más contraste solo de
+     día sería una pieza extra de complejidad para un efecto secundario,
+     no pedido ("solo si es barato").
+
+8. **Noche: oscurece `scene.background` y la luz ambiental según
+   `sol.elevacion`, con rampa entre 0° y -6° (crepúsculo civil).** No hay
+   ningún dato explícito de "es de noche"; se deriva del mismo dato que ya
+   apaga el sol (`factorIntensidadSol`). `COLOR_NOCHE` es un azul-morado
+   oscuro con algo de calidez (no negro ni azul frío puro), para no romper
+   "cálido y hogareño" (CLAUDE.md) ni de noche. La luz ambiental baja de
+   0.35 a 0.14 (no a 0): a 0 la habitación quedaría con las caras sin sol
+   directo en negro puro, ilegible — un poco de luz ambiental de noche es
+   la misma licencia estética que ya se tomó de día (ver Fase 6 checkpoint
+   3, decisión sobre luz ambiental).
+
+9. **Cámara: composición distinta en retrato (móvil) vs. landscape,
+   pedido explícito ("la casa abajo, el clima arriba").** En landscape el
+   encuadre es EXACTAMENTE el de antes (mismo cálculo, sin tocar). En
+   retrato (`aspecto<1`), dos cambios encadenados:
+   - El ancho ya no se deriva del alto (`alcanceHorizontal =
+     alcanceVertical*aspecto`, checkpoint 1) — eso encogía la habitación
+     en pantallas estrechas. Se deriva el ALTO del ANCHO necesario para
+     encuadrar la habitación (`alcanceVertical = alcanceBase/aspecto`),
+     que de por sí deja mucho más cielo visible en una pantalla alta y
+     estrecha, sin tocar el tamaño de la habitación.
+   - Ese sobrante vertical se reparte asimétrico (2.2× arriba, 0.5× abajo,
+     encontrado a ojo con capturas reales de 393×852) en vez de simétrico,
+     para que la habitación quede en la franja inferior de la pantalla —
+     confirmado con captura de móvil real que el resultado dejaba la
+     habitación abajo con una franja de cielo/nubes arriba, tal como se
+     pidió.
+   - Nubes/lluvia/rayo NO se tocaron para retrato — sus posiciones son
+     `objetivo + radio×offset` en espacio de mundo, independientes de la
+     cámara, así que ya aparecían dentro de la franja de cielo ampliada
+     sin cambios. **Pendiente de revisar con más calma:** en retrato queda
+     bastante cielo vacío entre el clima y el panel superior (las nubes no
+     se expanden para aprovechar el espacio extra) — aceptado por ahora
+     ("solo si es barato"), se revisaría si hace falta más adelante.
+
+10. **`scripts/captura-escena3d.mjs` ampliado con espera opcional (ms) y
+    viewport opcional, no un script nuevo.** Necesario para verificar este
+    checkpoint de verdad: sin espera no se puede comprobar que la lluvia
+    cae (solo el frame inicial) ni que el rayo parpadea, y sin viewport
+    configurable no se puede comprobar el layout de retrato. Cambio
+    retrocompatible (parámetros nuevos al final, con default que reproduce
+    el comportamiento anterior).
+
+11. **Panel de depuración en `escena3d.html` (además del banner "MODO
+    DEBUG" ya existente), pedido explícito.** Formulario simple
+    (hora/nubes/lluvia) que reconstruye la query string y recarga la
+    página — reutiliza `leerOverrideDebug()` tal cual, no añade ningún
+    camino de datos nuevo. Fijo en la esquina superior derecha, con hueco
+    reservado para el banner de arriba (se solapaban en el primer
+    intento).
+
+### Fase 6 — Escena 3D (checkpoint 6: lluvia realista, tormenta real, nubes variables, viento)
+
+Pedido explícito del usuario tras ver el checkpoint 5 ("la lluvia no me
+gusta... partículas más pequeñas cayendo verticalmente, mucho más rápido,
+más partículas, sin agrupamientos, distribución aleatoria. en cuanto a la
+tormenta, deberíamos pedir ese dato también. las nubes en el móvil se ven
+muy bajas, aprovecha toda la altura. haz que sean un poco aleatorias... que
+la cantidad no sea simplemente la opacidad. también deberíamos implementar
+partículas de polvo para el viento y su dirección, teniendo en cuenta la
+orientación de la casa").
+
+1. **`src/data/openMeteo.js` pide ahora también `wind_direction_10m` y
+   `weather_code`.** Confirmado con una petición real (curl) que
+   Open-Meteo los sirve a resolución `minutely_15` — no daba por hecho que
+   `weather_code` estuviera disponible a esa resolución (en otras APIs de
+   tiempo suele ser solo horario/diario), y merecía la pena comprobarlo
+   antes de construir nada encima. `esTormenta(codigoTiempo)` vive aquí
+   (no en `escena3d/`): es interpretación del dato de la API (códigos WMO
+   95/96/99 = tormenta), no algo específico de la escena — reutilizable el
+   día que el dashboard también quiera saber si hay tormenta.
+   `src/data/adaptador.js` expone `vientoDireccion` y `codigoTiempo` en
+   `actual`, mismo patrón que `viento`/`precipitacion` ya existentes.
+   `test/datos-reales.test.js` (red, fuera de `npm test`) actualizado y
+   ejecutado — de paso se encontró y arregló un bug preexistente no
+   relacionado (le faltaba `bandaConfort` al piso de prueba, roto desde la
+   Fase 3, nadie lo había vuelto a ejecutar).
+
+2. **Tormenta: `esTormenta(codigoTiempo)` sustituye por completo la
+   heurística lluvia+nubes del checkpoint 5.** `hayTormenta()` (con sus
+   umbrales `UMBRAL_TORMENTA_MM`/`UMBRAL_TORMENTA_NUBES`) se ha eliminado
+   de `escena.js` — ya no aproxima nada, usa el dato real. La escena
+   aislada (`escena3d.html`) no hace fetch real todavía (ver decisión 13
+   del checkpoint 1-3: la integración con datos en vivo es un checkpoint
+   aparte), así que se prueba con el override `?debugCodigoTiempo=95`.
+
+3. **Lluvia reescrita por completo: de 8 franjas diagonales fijas a un
+   único `THREE.Points` con cientos de partículas verticales aleatorias.**
+   Al ser vertical (eje Y de mundo) ya no hace falta orientar nada hacia
+   la cámara (con `camera.up` en el eje Y del mundo, una línea vertical en
+   espacio de mundo se proyecta vertical en pantalla sea cual sea el
+   azimut de la cámara) — se eliminó `direccionCamara3D()`, que se quedó
+   sin ningún otro uso. Posiciones con `Math.random()` de verdad (no un
+   patrón de offsets fijo): con cientos de gotas cayendo rápido no hace
+   falta que sea estable entre cargas para comparar capturas, a diferencia
+   de las nubes.
+   - **Bug real: el tamaño no se veía — con cámara ortográfica, el shader
+     de `THREE.Points` de esta versión de Three.js solo aplica
+     `sizeAttenuation` (atenuar el tamaño por distancia) para cámaras en
+     perspectiva.** Con una ortográfica, `size` es directamente el tamaño
+     en PÍXELES de pantalla, no en unidades de mundo — `radio * 0.026`
+     (pensado como el resto de la escena, en unidades de mundo) daba
+     sprites de bastante menos de 1px, invisibles. Corregido a un tamaño
+     en píxeles fijo (4.5) con `sizeAttenuation: false`. Aplica igual al
+     polvo del viento (decisión 6) — mismo tamaño en píxeles, no en
+     `radio`.
+   - Velocidad de caída en **metros por segundo reales** (6-9 m/s según
+     intensidad), no en fracción de `radio` como el resto de elementos
+     decorativos de la escena — la caída de la lluvia es un fenómeno
+     físico con una velocidad real, no algo dimensionado a la escala de
+     la habitación.
+   - Textura de gota: una cápsula vertical (más alta que ancha) en vez de
+     un punto redondo — un punto redondo a esta velocidad se lee como una
+     mota flotando, no como lluvia.
+
+4. **Nubes: cantidad de cúmulos según `nubesPct` (no solo opacidad),
+   posición con jitter aleatorio, tamaño más pequeño con menos nubosidad.**
+   `numeroCumulos(nubesPct)`: 0 por debajo del umbral, 1 a 4-5 según
+   tramos. Como generar posiciones nuevas con `Math.random()` sin más
+   habría vuelto a arriesgar el roce con el tejado que costó tantas
+   rondas resolver en el checkpoint 5, se mantienen las anclas ya
+   validadas como zona segura (con una 5ª añadida, misma familia de
+   dirección) — lo aleatorio es CUÁLES de las anclas se usan
+   (`barajar()`, Fisher-Yates) y un jitter pequeño alrededor de cada una
+   (mismo orden de magnitud que la deriva de animación ya confirmada
+   segura). Tamaño de cada cúmulo escala con `numCumulos` — pedido
+   explícito ("si hay pocas, una nube pequeña"), no el mismo tamaño con
+   menos opacidad.
+
+5. **Nubes en retrato: `techoCielo(aspecto)` reparte los cúmulos en un
+   rango de alturas mucho mayor cuando `aspecto<1`, en vez de la altura
+   fija de landscape.** `construirCamara` (checkpoint 5) ya deja mucho más
+   cielo vertical disponible en retrato (el alto del encuadre se deriva
+   del ancho, no al revés); antes las nubes no aprovechaban ese sobrante
+   y quedaban todas a la misma altura de landscape, muy abajo en una
+   pantalla de móvil alta. Verificado con 3 capturas de móvil distintas
+   (alturas aleatorias distintas cada vez) sin que ninguna llegase a
+   rozar ni el tejado ni el borde superior del encuadre — con margen de
+   sobra en ambos extremos, no ajustado al límite.
+
+6. **Polvo en suspensión (viento), solo sin lluvia — nuevo, `THREE.Points`
+   igual que la lluvia.** `direccionVientoXZ()` convierte grados de
+   brújula a X/Z de mundo con la misma fórmula que `direccionSol()` — el
+   viento apunta bien respecto a la fachada real SIN necesitar
+   `azimutBase` ni ningún ajuste por la orientación de la casa: los ejes
+   de mundo de toda la escena ya están alineados a la brújula desde
+   `geometria.js`/`sol.js` (es solo la CÁMARA la que rota según esa
+   orientación, no el mundo). `wind_direction_10m` es de dónde SOPLA el
+   viento (convención meteorológica), así que la dirección de movimiento
+   real es +180°. Velocidad real (km/h → m/s), cantidad y velocidad
+   escalan con `viento.velocidad` hasta un tope (45 km/h, "ya es mucho
+   viento"). Mismo bug de contraste que ya salió con las nubes y el rayo
+   en el checkpoint 5: el primer color (`0xd9c9a3`, tono polvo/tierra
+   claro) era casi invisible contra el cielo cálido claro — corregido a
+   un tono más oscuro/terroso (`0x9c7c4f`).
+
+### Fase 6 — Escena 3D (checkpoint 7: reflejo de noche, viento más visible, cielo y suelo)
+
+Pedido explícito tras ver el checkpoint 6: "comprueba que de noche no se
+vean los reflejos de las ventanas. comprueba lo del viento, no lo puedo
+ver. elige qué poner de fondo — un cielo que evolucione por hora/clima, o
+hierba y cielo... algo simple."
+
+1. **Bug real confirmado y arreglado: el reflejo diagonal del cristal se
+   veía a opacidad completa de noche, sin ninguna luz que lo produjera.**
+   `OPACIDAD_REFLEJO` era una constante fija, nunca modulada por luz —
+   ahora se atenúa por `factorIntensidadSol(sol)` (la misma función que ya
+   apaga la luz direccional), con un mínimo de 0.15 en vez de bajar a 0
+   del todo: a 0 el cristal se vería como un plano totalmente liso en
+   penumbra, no como cristal. `factorSol` se calcula ahora ANTES de
+   construir las paredes (antes solo se calculaba dentro de
+   `construirLuzSol`, que se llama después) — no cambia qué se ve de día,
+   solo añade el atenuado de noche/penumbra.
+
+2. **Viento: no era un bug de lógica, era de visibilidad — confirmado con
+   captura real que las partículas SÍ se construían y animaban, solo que
+   a 3px y con la opacidad del checkpoint 6 eran demasiado difíciles de
+   distinguir.** Subido a 6px (tamaño similar al de la lluvia) con más
+   opacidad base y más partículas mínimas (25→45), sin tocar la lógica de
+   dirección/velocidad, que ya funcionaba.
+
+3. **Fondo: cielo con degradado + suelo de hierba, en vez de un color
+   plano — pedido explícito, "algo simple" a elegir por Claude.** Cielo:
+   textura vertical generada en `<canvas>` (mismo recurso ya usado para
+   nubes/entorno del cristal — sin assets externos), horizonte↔cénit,
+   con los mismos `nocturnidadActual`/`nubesPct` que ya movían el resto de
+   la escena — así el cielo por sí solo ya cuenta parte del clima. Suelo:
+   plano de hierba a ras del suelo real de la habitación.
+
+4. **El suelo de hierba costó tres intentos — lección real sobre cámaras
+   ortográficas y "horizonte".** Con cámara ortográfica y vista
+   inclinada, TODOS los rayos de vista son paralelos: un plano de
+   terreno suficientemente grande no deja ver nada de cielo en absoluto
+   (no hay punto de fuga que "esconda" el terreno lejano bajo un
+   horizonte, como pasaría con una cámara en perspectiva). Intentos:
+   - Cuadrado grande centrado en la habitación → un cuadrado alineado a
+     los ejes de mundo, visto en isométrico, se proyecta como un rombo:
+     sus 4 esquinas quedaban dentro de encuadre como triángulos de cielo
+     colándose entre grandes zonas de hierba, muy poco natural.
+   - Círculo → o cubría el encuadre entero (sin nada de cielo, con el
+     mismo tamaño que hacía falta para tapar las esquinas del intento
+     anterior) o, más pequeño, se veía como una "colina" — el borde
+     curvo de una elipse (la proyección de un círculo en este ángulo) se
+     nota mucho más que el de un horizonte real.
+   - **Rectángulo alineado con la dirección de la CÁMARA (no con los ejes
+     de mundo), mucho más ancho que profundo — ganador.** El borde lejano
+     de un rectángulo así se proyecta como una línea recta horizontal de
+     verdad (un rectángulo tiene bordes rectos; la clave era que ese
+     borde quedase perpendicular a la mirada de la cámara, no en
+     diagonal como con el cuadrado). Con el lado corto (profundidad,
+     `alcanceLejos`/`alcanceCerca`) controlando dónde queda el horizonte
+     en pantalla, y el lado largo (`anchoLateral`, 16×radio) tan ancho
+     que sus esquinas quedan muy lejos a los lados, fuera de encuadre
+     incluso en retrato. La rotación del rectángulo se deriva de
+     `azimutCamaraDeg` con la misma fórmula que ya usa `direccionCamaraXZ`
+     (+180°, para que apunte en la dirección CONTRARIA a la cámara) — no
+     tanteada a ojo, aunque sí verificada con captura real.
+   - Añadido, como el resto de elementos "de fondo" (nubes, lluvia,
+     viento), DESPUÉS de calcular radio/cámara — con `anchoLateral =
+     16×radio` habría inflado la caja englobante de
+     `calcularRadioEscena()` muchísimo si se calculara con él dentro,
+     el mismo problema (mucho más extremo) que ya se documentó para los
+     edificios retirados y para el resto de elementos de clima.
+
+### Fase 6 — Escena 3D (checkpoint 8: isla flotante, árbol, charco, viento con estela)
+
+Pedido explícito del usuario, cambio de idea sobre el suelo del
+checkpoint 7: "la casa esté en una isla flotando en el cielo, como
+arrancada del suelo, un cono invertido con tierra y piedras abajo —
+minimalista. detalles simples con sombra (árbol, buzón, piedra), y un
+charco que se vaya llenando cuando llueve — eso ya te lo dejo a ti.
+cambia la animación del viento, que haga círculos y dejen estela; alguna
+hoja si no es mucho trabajo."
+
+1. **La isla sustituye por completo al suelo de hierba plano del
+   checkpoint 7 — y de paso resuelve el problema que costó tres intentos
+   en ese checkpoint.** Un suelo INFINITO (o muy grande) con cámara
+   ortográfica no deja ver nada de cielo (todos los rayos de vista son
+   paralelos, no hay horizonte natural); una isla es un objeto FINITO
+   colgado en el aire, así que ese problema desaparece solo — no hace
+   falta alinear nada con la cámara. Dos piezas simples (no una malla
+   escultórica): una tapa plana de hierba (mismo material que el suelo
+   anterior) y un `ConeGeometry` invertido (`rotateX(Math.PI)`, con
+   `openEnded` porque la tapa de hierba ya cubre el hueco por arriba) para
+   la tierra, con 3 rocas simples (icosaedros) cerca de la punta para que
+   no acabe en un pico perfectamente liso.
+
+2. **Radio en dos fases, porque la isla SÍ debe entrar en el encuadre de
+   la cámara (a diferencia de nubes/lluvia/viento).** Se calcula un
+   `radioHabitacion` (solo suelo/techo/paredes) para dimensionar la isla
+   proporcionalmente a la habitación, se añaden isla + árbol + charco, y
+   SOLO ENTONCES se recalcula el `radio` final (con todo dentro) que usa
+   la cámara — si la isla se dimensionara con el radio final (circular:
+   necesita el radio final para existir, pero el radio final la necesita
+   a ella para calcularse), o si se añadiera después de la cámara como
+   nubes/lluvia (mismo patrón de "no inflar el encuadre"), quedaría
+   cortada por el borde del encuadre en vez de enmarcada.
+
+3. **Bug real: el cono de tierra se veía casi negro con el sol alto,
+   confirmado con captura y corregido con `emissive`, no con más luz
+   ambiental global.** Con el sol cerca del cénit, los lados del cono
+   quedan casi de canto a la luz directa (ángulo muy oblicuo entre su
+   normal y la dirección del sol) y con solo la ambiental (0.35) apenas
+   se veían — no es un bug de sombra (`receiveShadow:false` no lo
+   arregló, se probó primero por si era autosombra/acné en ángulo
+   rasante) sino de iluminación real insuficiente. Un `emissive` tenue
+   propio del material (no tocar `AMBIENTAL_DIA`, que afecta a TODA la
+   escena) lo resuelve sin photorealismo — coherente con "cálido y
+   hogareño" (CLAUDE.md), no hace falta que sea físicamente exacto.
+   Segundo bug encadenado: ese `emissive` fijo se veía "brillando" de más
+   de noche, con el resto de la escena ya oscurecida — atenuado también
+   por `nocturnidadActual`, igual que el resto de luces de la escena.
+
+4. **Árbol: "detrás de la casa" se define respecto a la CÁMARA, no a
+   ninguna ventana.** Un primer borrador usaba la normal de la ventana A
+   como referencia — pero la cámara está desplazada 45° respecto a esa
+   normal (checkpoint 1), así que no es exactamente "detrás" desde el
+   punto de vista real. `-dirCamaraXZ` (ya calculado para atenuar los
+   reflejos del cristal) es el lado que la cámara no ve de frente en
+   absoluto — ahí es donde un árbol se lee como detrás de la casa de
+   verdad, sea cual sea la orientación real del piso. Solo tronco +
+   copa (cilindro + esfera), sin ramas ni textura — de la lista de
+   detalles opcionales pedida, se implementó solo este; buzón y piedra
+   sueltas se dejaron fuera para no acumular objetos decorativos sin
+   necesidad ("minimalista").
+
+5. **Charco: crece con el tiempo mientras llueve, sin lógica de
+   "vaciarse".** `escena3d.html` no hace fetch de datos en vivo — todo
+   viene de `precipitacion`, fija durante toda la carga de la página — así
+   que no existe un momento real de "dejó de llover a mitad de sesión"
+   que haga falta drenar; añadir esa lógica sería para un caso que no
+   puede pasar en esta página tal como está montada ahora mismo. Oculto
+   del todo (`visible = false`) sin lluvia, en vez de con escala 0 — más
+   explícito y evita cualquier resto visible a opacidad mínima.
+
+6. **Viento: la turbulencia es la MISMA fórmula de posición reutilizada
+   tres veces (cabeza del polvo, 2 puntos de estela, hojas), no tres
+   sistemas de partículas distintos.** `posicionViento()` suma al avance
+   recto de antes (checkpoint 6) un giro pequeño en el plano perpendicular
+   a la dirección del viento (`cos`/`sin` de una fase que avanza con el
+   tiempo) — la partícula avanza en línea recta EN PROMEDIO (la dirección
+   real del viento) mientras gira alrededor de esa línea, que es
+   literalmente "que haga círculos pero en la dirección correcta".
+   - **Estela sin guardar historial de verdad:** en vez de acumular
+     posiciones pasadas, se evalúa la MISMA función de posición en
+     instantes ligeramente anteriores (`t − PASO_ESTELA`,
+     `t − 2×PASO_ESTELA`) — como la trayectoria es una fórmula
+     determinista de `t`, "la posición hace 0.09s" es tan barato de
+     calcular como "la posición ahora", sin buffers ni arrays de
+     histórico por partícula.
+   - **La estela es un `THREE.Points` MÁS PEQUEÑO Y MÁS TENUE, no el
+     mismo tamaño con menos opacidad de golpe.** `THREE.PointsMaterial`
+     no soporta tamaño por vértice en esta versión de Three.js (sin
+     shader propio) — con un solo tamaño para cabeza+estela mezclados en
+     el mismo `Points`, probado, se leía como "el doble de polvo normal",
+     no como una cola. Dos objetos `Points` (cabeza a tamaño/opacidad
+     completos, estela más pequeña y tenue) consiguen el efecto de cola
+     con dos `THREE.PointsMaterial` normales, sin shader a medida.
+   - **Hojas: mismo cálculo de trayectoria, con su propio radio de giro
+     algo mayor (una hoja se balancea más que una mota de polvo) y sin
+     estela propia** — "si no es mucho trabajo": reutilizar
+     `posicionViento()`/`generarDatosViento()` en vez de un sistema
+     aparte fue lo que lo mantuvo barato.
+
+### Fase 6 — Escena 3D (checkpoint 9: ajustes tras ver la isla — zoom, forma, árbol/buzón, lluvia, cielo)
+
+Pedido explícito tras ver el checkpoint 8 en vivo: más zoom (la casa se
+veía pequeña); la isla como disco con montañitas en el borde, no un cono
+("como para que no se pueda caer nadie"); el árbol no detrás de la casa y
+algo más complejo que una esfera; quitar el charco (quedaba demasiado
+cerca); un buzón (palo + caja metálica + bandera en L roja); más
+intensidad de lluvia al máximo; que el viento incline el ángulo de la
+lluvia; y el cielo en tres estados de verdad (azul de día, negro de
+noche, rojizo en amanecer/atardecer).
+
+1. **Isla: disco (cilindro corto) + tapa de hierba + anillo de
+   montículos, sustituye al cono del checkpoint 8 — y de paso encoge
+   mucho la caja englobante de la escena, ayudando directamente al pedido
+   de zoom.** Bug real al pasar de cono a disco: `ConeGeometry` con
+   `openEnded` (checkpoint 8) no tenía tapa propia, así que la tapa de
+   hierba encima rellenaba ese hueco sin más; `CylinderGeometry` SÍ trae
+   sus dos tapas por defecto, así que la cara superior del disco de
+   tierra (a la misma altura, y=0) tapaba del todo a la hierba —
+   confirmado en captura real (no se veía nada verde). Se resolvió
+   bajando el disco 0.03 más de lo que su propio grosor exigiría, para
+   que su tapa quede claramente por debajo de la hierba. Los montículos
+   del primer intento (14, escala 0.11-0.16×radioIsla) salieron
+   desproporcionados — tapaban casi toda la hierba y parecían más
+   grandes que la propia casa; bajados a 0.045-0.065×radioIsla (16,
+   más pequeños y más numerosos) para que se note el borde sin dominar.
+
+2. **Árbol: se movió de "detrás de la cámara" (checkpoint 8) al LADO**
+   (`perp`, perpendicular a `dirCamaraXZ` — mismo vector que ya usa el
+   viento para el ancho de su corriente), pedido explícito de que no
+   quedara escondido. Copa: de una sola esfera a un racimo de 3 (mismo
+   recurso que los puffs de nube — formas simples solapadas, no una
+   forma nueva más compleja) para un contorno irregular en vez de "un
+   simple círculo".
+
+3. **Buzón nuevo — bug real de posición, no solo de diseño.** El primer
+   intento lo colocaba al lado contrario del árbol (mismo `perp`, signo
+   opuesto) pero SOLO con desplazamiento lateral — quedaba justo detrás
+   de la pared cercana a la cámara, visible como una silueta rara a
+   través del cristal semitransparente en vez de estar claramente fuera,
+   en la hierba. Se corrigió sumando también un desplazamiento hacia la
+   cámara (`+dirCamaraXZ`), no solo lateral, para sacarlo de detrás de la
+   pared. Cuatro piezas (poste, caja, bandera vertical, bandera
+   horizontal), todas `BoxGeometry`/`CylinderGeometry` sin textura.
+
+4. **Charco eliminado sin más** (`construirCharco`/`animarCharco` y su
+   llamada, borrados) — pedido explícito, quedaba demasiado cerca de la
+   casa y "no convencía"; no se intentó reposicionarlo primero porque el
+   propio pedido fue quitarlo, no ajustarlo.
+
+5. **Lluvia: más intensidad, dos rondas.** 70-260 (checkpoint 6) → 110-550
+   (primer intento de esta ronda, insuficiente todavía, pedido explícito
+   otra vez) → 160-850, con el radio del área (`extensionXZ`) reducido de
+   1.15×radio a 0.95×radio para que la misma cantidad de gotas se note
+   más concentrada dentro del encuadre en vez de repartida en un área más
+   ancha.
+
+6. **Ángulo de la lluvia por viento — dos partes, no solo una.** La
+   deriva horizontal (posición X/Z que también avanza con el tiempo,
+   igual que la posición Y ya avanzaba cayendo) solo cambia la
+   TRAYECTORIA — en una imagen fija, cada gota se seguía dibujando
+   vertical, así que no se notaba ningún ángulo, solo un desplazamiento
+   de conjunto. Confirmado con captura real que hacía falta también
+   inclinar la textura de la gota. Como la textura (`texturaGota()`) se
+   genera una única vez por escena (no por frame), rotar el `<canvas>`
+   antes de dibujar la cápsula es prácticamente gratis — se calcula el
+   ángulo EN PANTALLA proyectando la deriva horizontal sobre la
+   "derecha de pantalla" de la cámara (`{x:-dirCamaraXZ.z,
+   z:dirCamaraXZ.x}`, mismo patrón `perp` de siempre): la componente de
+   viento perpendicular a la mirada de la cámara inclina la lluvia, la
+   componente hacia/desde la cámara no (proyección ortográfica, sin
+   profundidad aparente) — coherente con lo que se vería de verdad desde
+   un ángulo de cámara fijo. `texturaGota()` dejó de cachear un único
+   resultado global (ahora varía según el viento de cada carga).
+
+7. **Cielo en tres estados — sustituye el diseño "cálido incluso de
+   noche" del checkpoint 7 por lo pedido explícitamente: azul de día,
+   negro de noche, rojizo en amanecer/atardecer.** Nuevo
+   `factorCrepusculo(elevacion)`: una ventana de ±9° alrededor de
+   elevación 0° (a ojo, no un valor astronómico como el crepúsculo civil
+   de -6° que ya usa `nocturnidad()`) que tiñe el horizonte de
+   naranja-rojizo y el cénit de un violeta más sutil — aplicado DESPUÉS
+   del tono de nubosidad, para que un atardecer nublado siga leyéndose
+   rojizo en vez de quedar tapado por el gris. `COLOR_FONDO` (la
+   constante del diseño anterior, crema) quedó sin ningún uso — se
+   eliminó en vez de dejarla como código muerto.
+
+8. **Zoom: `CAMARA_MARGEN` de 1.6 a 1.28.** El valor de 1.6 es de la
+   Fase 6 / checkpoint 1, antes de que la escena incluyera la isla
+   completa en el cálculo de encuadre (checkpoint 8) — con la isla ya
+   puesta, quedaba más margen del que hacía falta. Verificado que la isla
+   completa (con los montículos del borde) sigue cabiendo sin cortarse
+   ni en landscape ni en el retrato de móvil, con nubes al 90% y lluvia
+   incluida.
+
+### Fase 6 — Escena 3D (checkpoint 10: bugs de posición, textura del terreno, piedras del muro)
+
+Pedido explícito tras ver el checkpoint 9: el árbol se veía DENTRO de la
+casa; el buzón muy pequeño; el contorno de las sombras borroso; textura
+en el terreno (baches, hierbas, barro); y las piedras del borde más
+puntiagudas, alargadas y en mayor cantidad, "como una especie de muro".
+
+1. **Bug real: el árbol quedaba dentro de la casa — error de geometría,
+   no de gusto.** `distancia = anchoLateral/2 + margen` es la mitad del
+   ANCHO de la habitación medida a lo largo del propio eje lateral de la
+   habitación — pero el árbol se coloca a lo largo de `perp`
+   (perpendicular a la cámara, que está desplazada 45° respecto a la
+   orientación real del piso desde el checkpoint 1). Alejarse en
+   diagonal respecto al rectángulo de la habitación y comparar esa
+   distancia solo con la mitad del ancho no basta para salir fuera de
+   la huella — hace falta la mitad de la DIAGONAL (`Math.hypot(ancho,
+   profundidad)/2`) para que valga sea cual sea el ángulo entre `perp` y
+   los ejes reales de la habitación. Es la misma clase de error que ya
+   había costado un bug parecido con el buzón en el checkpoint 9 (ahí
+   por desplazamiento insuficiente en una dirección, aquí por comparar
+   con la magnitud equivocada) — misma lección: cuando el objeto se
+   coloca a lo largo de un eje que NO es el de la propia habitación, la
+   comprobación de "está fuera" tiene que usar el peor caso (la
+   diagonal), no una medida de un solo eje.
+
+2. **Buzón: `grupo.scale.setScalar(1.8)`, no rehacer las medidas de cada
+   pieza a mano.** Simplemente pequeño a esta distancia de cámara, no un
+   problema de diseño — escalar el grupo entero (position y scale son
+   transforms independientes; escalar no mueve la posición ya fijada)
+   fue más simple que recalcular 4 geometrías.
+
+3. **Sombras menos borrosas: `shadow.radius` de 3 a 1, `mapSize` de 1024
+   a 2048.** El 3 era pedido explícito del checkpoint 5 para lo
+   contrario (ablandar un borde muy duro) — aquí se pide lo contrario
+   otra vez, así que baja, no desaparece del todo (evita "shadow acne"
+   en el borde, ver checkpoint 5). `mapSize` más grande ayuda a que el
+   contorno se note menos "escalonado/difuso" de por sí, independiente
+   del radio de suavizado.
+
+4. **Textura de terreno: canvas procedural aplicado como `map` al
+   material de hierba (antes solo `color` plano) — mismo recurso que el
+   resto de texturas de la escena, sin assets externos.** Manchas de
+   verde más claro/oscuro para los "baches" (variación de tono, no
+   relieve real — cambiar la geometría para tener bultos de verdad sería
+   mucho más trabajo para un efecto que a esta distancia de cámara
+   apenas se notaría), unas pocas manchas de barro más grandes y
+   opacas, y trazos cortos oscuros agrupados en "matas" para sugerir
+   mechones de hierba. `RepeatWrapping` con `repeat.set(3,3)` para que
+   no se note como un único parche estirado sobre todo el círculo de la
+   isla.
+
+5. **Piedras del borde: dos rondas hasta que se leyeron como rocas de
+   verdad, no como gotas/balas romas.** Primer cambio de esta ronda
+   (más alargadas verticalmente, `IcosahedronGeometry` con 1
+   subdivisión) no bastó — en captura real se veían suaves y
+   redondeadas, no puntiagudas, porque Three.js interpola (suaviza) los
+   normales compartidos entre caras por defecto. El arreglo real fue
+   `flatShading:true` en un material NUEVO solo para los montículos (no
+   reutilizar `materialTierra`, que también usa el disco — facetar la
+   superficie cilíndrica lisa del disco no hacía falta y se vería
+   raro), combinado con volver a `detail=0` (menos caras, más grandes:
+   con flatShading, pocas caras grandes se lee como "roca partida en
+   pocos planos", más piedra que mora). 26 montículos (antes 16),
+   radio de anillo más ceñido para que se solapen ligeramente entre sí
+   — "como una especie de muro" continuo, no piedras sueltas.
+
+### Fase 6 — Escena 3D (checkpoint 11: isla más grande, hierba más verde, buzón en esquina, muro sin huecos, barro con contorno, filamentos con viento)
+
+Pedido explícito tras ver el checkpoint 10: isla más grande ("me da
+claustrofobia"); hierba más verde; buzón más pequeño y en una esquina de
+la casa; más piedras, sin huecos para saltar el muro; el barro con
+contorno definido; y filamentos de tierra en la hierba que se muevan con
+la velocidad del viento.
+
+1. **Isla: `radioIsla` de 1.25×radioHabitacion a 1.9×.** Efecto en
+   cadena esperado y aceptado: al crecer la isla crece la caja
+   englobante de la escena, así que la cámara se aleja un poco para
+   seguir encuadrándolo todo — es la misma relación que ya se documentó
+   al revés en el checkpoint 9 (bajar `CAMARA_MARGEN` porque la isla
+   entraba en el cálculo de encuadre). No se tocó `CAMARA_MARGEN` esta
+   vez: el pedido era más margen alrededor de la casa, no más zoom sobre
+   ella.
+
+2. **Hierba: `COLOR_HIERBA` más saturado (0x93a663→0x6fa350) y los tonos
+   de "baches" de la textura recalculados a juego** — con la textura de
+   baches/barro del checkpoint 10 encima, el verde apagado original se
+   leía pardo, no verde.
+
+3. **Buzón: `ESCALA_BUZON` de 1.8 a 1.2 (el 1.8 del checkpoint 10 se
+   pasó en la dirección contraria) y reposicionado a una esquina REAL de
+   la habitación.** El checkpoint 10 lo colocaba en una posición relativa
+   a la cámara (`perp` + `dirCamaraXZ`) que arreglaba el bug de quedar
+   detrás del cristal, pero no era ninguna esquina en concreto — pedido
+   explícito de una esquina de verdad. `geo.esquinasSuelo[0]` (mismas 4
+   esquinas exactas que usan las paredes, no una aproximación) empujado
+   un poco más hacia fuera en la dirección centro→esquina.
+   `dirCamaraXZ`/`radioIsla` dejaron de hacer falta en `construirBuzon()`
+   con el nuevo cálculo — parámetros eliminados de la firma en vez de
+   dejarlos sin usar.
+
+4. **Montículos: 26→46, y el radio de cada uno también algo mayor
+   (0.055→0.075×radioIsla) — al crecer `radioIsla` (punto 1), el mismo
+   número de piedras del mismo tamaño de antes se separó, dejando huecos
+   reales** ("que no haya huecos para saltar del círculo", pedido
+   explícito) — el perímetro del anillo creció con la isla pero la
+   cantidad/tamaño de piedras no, hasta este ajuste.
+
+5. **Barro: contorno explícito (`ctx.stroke()` además de `ctx.fill()`),
+   no solo relleno difuso.** El primer intento (checkpoint 10, solo
+   relleno con opacidad parcial) "no convencía" — se leía como suciedad
+   borrosa, no como un agujero de barro con forma. Un trazo más oscuro
+   siguiendo el mismo contorno de la elipse marca el borde con claridad.
+
+6. **Filamentos de tierra: nuevos, `construirFilamentos`/
+   `animarFilamentos` — 45 brizones finos color tierra (no verdes: se
+   pidieron como algo distinto de la hierba en sí), balanceándose según
+   `viento.velocidad`.** Mismo patrón de pivote-en-la-base que ya usan el
+   tronco del árbol y el poste del buzón (grupo con el mesh desplazado
+   hacia arriba dentro, para que la rotación gire desde el suelo). Sin
+   viento sigue habiendo un balanceo mínimo (no completamente inmóvil —
+   se notaría "congelado" en una escena donde todo lo demás ya anima) en
+   vez de una rama condicional aparte para "sin viento no animar nada".
+   La dirección del balanceo es la dirección REAL del viento
+   (`direccionVientoXZ`, misma función que ya usan el polvo y la
+   lluvia) — todos los filamentos se inclinan hacia el mismo lado a la
+   vez, no cada uno para un lado aleatorio distinto.
+
+### Fase 6 — Escena 3D (checkpoint 12: contraste de lluvia, barro 3D de verdad, muro sin huecos con piedras bajas, "peter-panning" en las sombras)
+
+Pedido explícito tras ver el checkpoint 11: diferencia más clara entre
+poca y mucha lluvia; el contorno del barro tenía que ser relieve 3D real,
+no un trazo en la textura (malentendido del checkpoint 11); más piedras
+(seguía habiendo huecos) pero más bajas, ninguna más alta que la casa; y
+un problema real de sombra — "casi todos los objetos tienen luz justo en
+su base, donde debería haber sombra".
+
+1. **Lluvia: rango de partículas mucho más amplio (160-850 → 35-1100),
+   no solo el máximo subido otra vez.** Las tres rondas anteriores
+   subieron el máximo pero el MÍNIMO también había ido subiendo con cada
+   ronda — con 160 de mínimo, poca lluvia ya parecía bastante lluvia, así
+   que "poco" y "mucho" no se distinguían (pedido explícito: "que la
+   diferencia sea más clara"). Bajar el mínimo de verdad, no solo subir
+   el máximo, es lo que crea el contraste.
+
+2. **Barro: reescrito como relieve real (labio elevado que proyecta
+   sombra + disco a ras de la hierba), no como el intento anterior
+   (fondo hundido por DEBAJO de la hierba) — que resultó no verse EN
+   ABSOLUTO.** Bug real encontrado al implementar la aclaración del
+   usuario: la tapa de hierba es un único disco continuo, sin ningún
+   agujero recortado de verdad — un disco de barro colocado por debajo
+   de ese nivel queda completamente tapado por la hierba que tiene
+   encima, invisible. La técnica que sí funciona (comprobada en captura
+   real) es la contraria: un TORO bien levantado sobre la hierba (no
+   apenas asomando) que proyecta una sombra real sobre un disco de barro
+   colocado A RAS de la hierba (visible, no oculto) — el relieve se lee
+   por la altura del labio y su sombra proyectada, no por una cavidad
+   recortada de verdad (que pediría geometría bastante más compleja,
+   cortar un agujero real en la malla de la hierba, para el mismo
+   resultado visual desde esta cámara fija).
+
+3. **Piedras: 46→62, y la altura ya no depende de `radioIsla`.** Seguía
+   habiendo huecos con 46 (pedido explícito otra vez). Más importante:
+   la altura de cada piedra se derivaba de la misma escala que su ancho
+   (ligada a `radioIsla`, que había crecido mucho en el checkpoint 11),
+   así que las piedras habían crecido en altura sin que nadie lo pidiera
+   — hasta superar la altura de la propia casa (pedido explícito:
+   "ninguna más alta que la casa"). Se separaron los dos ejes: el ANCHO
+   sigue ligado a `radioIsla` (para seguir solapando sin huecos sea cual
+   sea el tamaño de la isla), pero la ALTURA se deriva ahora de
+   `geo.altura` (la altura real de la habitación) con un tope explícito
+   (55% de esa altura) — un cambio en el tamaño de la isla ya no puede
+   volver a hacer que las piedras crezcan más que la casa sin querer.
+
+4. **Sombras: "peter-panning" real, confirmado y diagnosticado con
+   capturas de aislamiento antes de tocar ningún valor.** El síntoma
+   ("luz justo en la base de los objetos, donde debería haber sombra")
+   es el patrón clásico de bias/normalBias demasiado altos: con el sol a
+   un ángulo no cenital, desplazar el muestreo de sombra a lo largo de
+   la normal de la superficie equivale a desplazar la sombra
+   HORIZONTALMENTE respecto al objeto que la proyecta, dejando una tira
+   sin sombrear justo en el punto de contacto real. Diagnóstico en dos
+   pasos, no un ajuste a ciegas:
+   - Se puso `bias`/`normalBias` a 0 del todo → el hueco desapareció por
+     completo (confirma que la causa era el bias, no otra cosa —
+     posiciones de las piedras, receiveShadow, etc.).
+   - Con 0 del todo, en una captura a sol rasante (18:30) reapareció el
+     "shadow acne" (ruido de autosombra) que el bias ya evitaba desde el
+     checkpoint 3 — confirma que hace falta ALGO de bias, no cero.
+   Solución: `mapSize` subido a 4096 (texels más finos necesitan menos
+   bias para el mismo resultado sin acné — la isla más grande del
+   checkpoint 11 había subido `alcanceSombra`, y con él el tamaño de
+   cada texel en unidades de mundo) combinado con `normalBias` bajado de
+   0.03 a 0.0015 y `bias` de -0.0015 a -0.00012 — encontrado probando
+   ambos escenarios (piedras a mediodía, pared a sol rasante) hasta que
+   el hueco desapareciera a simple vista y el acné quedara imperceptible
+   a escala normal de captura (solo se nota con zoom ×4, no en la
+   imagen real).
+
+### Fase 6 — Escena 3D (checkpoint 13: toperas fuera de la casa, cielo nublado más bonito, piedras hasta el borde real, selector de hora)
+
+Pedido explícito tras ver el checkpoint 12: los agujeros de barro a
+veces salían dentro de la casa (aclarado: son toperas, así que además
+de no poder aparecer dentro de la casa tenían que ser más pequeñas, no
+un contorno grande); el cielo muy nublado se oscurece correctamente
+pero con un color feo; las piedras del muro debían llegar hasta el
+borde real de la isla, sin hierba visible más allá; y el campo de hora
+del panel de depuración debía ser un selector, no texto ISO escrito a
+mano.
+
+1. **Toperas: exclusión real del footprint de la casa, con el mismo
+   error que ya había costado un bug en el árbol/buzón — ejes de
+   cámara en vez de ejes propios de la habitación.** No existía ningún
+   chequeo antes: la posición aleatoria de cada agujero (`angulo`,
+   `distancia`) podía caer dentro del rectángulo de la habitación sin
+   que nada lo impidiera. Se añadió `dentroDeLaHabitacion(cx, cz, geo,
+   margen)`, que proyecta el punto candidato sobre los ejes LOCALES
+   reales de la habitación (`geo.ejeLateral`/`geo.ejeProfundidad`, ya
+   calculados por `calcularGeometria`) — NO sobre `dirCamaraXZ` (la
+   dirección de la cámara), que es lo que se usó por error la primera
+   vez en el árbol y el buzón esta misma sesión, y que solo coincide
+   con los ejes reales de la habitación cuando esta no está rotada
+   respecto a la cámara. Con la proyección correcta, cada agujero se
+   sortea dentro
+   de un bucle `do...while` con reintento (tope de 30 intentos) hasta
+   caer fuera del rectángulo con un margen de 0.5; verificado con 4
+   capturas de página nuevas (posiciones aleatorias distintas en cada
+   una, `Math.random()` no está sembrado) para confirmar que la
+   exclusión es fiable y no solo una casualidad de una única carga.
+
+2. **Toperas: tamaño reducido de 0.22–0.42 a 0.09–0.16 de radio.**
+   Aclaración del usuario de que el contorno grande de la ronda
+   anterior no encajaba con lo que en realidad quería representar
+   (toperas, no cráteres) — se mantiene intacta la técnica de relieve
+   del checkpoint 12 (labio elevado que proyecta sombra sobre un disco
+   a ras de hierba, nunca un hueco hundido — ver esa decisión para el
+   porqué), solo cambia la escala.
+
+3. **Cielo nublado: gris-azulado en vez del gris-morado anterior.**
+   El oscurecimiento con mucha nubosidad ya funcionaba bien
+   (confirmado explícitamente por el usuario, "lo cual está bien") —
+   el problema era solo el tono: `grisHorizonte`/`grisCenit` usaban
+   `0xd6cfc0`/`0x2a2735` y `0xc3c2bb`/`0x211f30`, que junto al azul del
+   cielo despejado de base leían como un morado sucio. Sustituidos por
+   `0xc7cdd1`/`0x2b323c` y `0x9aa6ad`/`0x161b22` — tonos azul-grisáceo
+   de "día encapotado" en vez de gris con dominante violeta.
+   Verificado con captura antes/después.
+
+4. **Piedras del muro: `r = radioIsla` en vez de `radioIsla * 0.9`.**
+   El 0.9 dejaba un anillo de hierba visible más allá de las piedras;
+   pedido explícito "que la isla acabe con ellas". Al posicionarlas al
+   radio exacto del disco de hierba/tierra, el propio ancho de cada
+   piedra (que se extiende hacia fuera desde su centro) ya sobresale un
+   poco más allá del borde del disco y lo tapa del todo — no hizo
+   falta agrandar el radio del disco ni las piedras, solo mover su
+   centro hacia fuera.
+
+5. **Selector de hora: `<input type="datetime-local">` en vez de
+   `<input type="text">` con ISO escrito a mano.** El campo
+   `debugHora` de `escena3d.html` pasa a un input nativo del
+   navegador; `datetime-local` espera/devuelve hora LOCAL del
+   navegador en formato `"AAAA-MM-DDTHH:mm"` (sin segundos ni "Z"),
+   distinto del ISO-con-Z que ya se guardaba en la URL — se añadió
+   `aDatetimeLocal()` en `main-escena3d.js` para convertir el valor
+   guardado al formato que el input necesita al rellenar el panel.
+   `leerOverrideDebug()` no cambió: sigue aceptando cualquier string
+   que `new Date()` sepa parsear, y el valor que devuelve el propio
+   input ya cumple eso sin conversión adicional al enviar el
+   formulario.
+
+6. **Confirmado: la detección de tormenta real (`esTormenta()`, código
+   WMO 95/96/99 en `src/data/openMeteo.js`) ya estaba implementada
+   desde el checkpoint 6** — el usuario preguntó directamente si se
+   había hecho. No es nueva de este checkpoint, solo se verificó que
+   sigue en pie y se explicó que la página aislada de depuración no
+   hace fetch real (por diseño, ver `depuracion.js`), así que se prueba
+   con `?debugCodigoTiempo=95`; la integración con el fetch en vivo
+   queda para el checkpoint futuro de integración con el dashboard.
+
+### Fase 6 — Escena 3D (checkpoint 14: filamentos fuera de la casa, muro de piedras sin huecos, noche más cálida, farola nueva)
+
+Pedido explícito tras ver el checkpoint 13: los filamentos de hierba
+también crecían dentro de la casa (mismo bug que las toperas); las
+piedras del borde seguían dejando huecos entre sí; la noche seguía
+siendo "un poco fea", pedido de hacerla más cálida; y una farola nueva
+en la esquina de la casa contraria al árbol, tipo farola de calle
+(alumbra hacia abajo, luz cálida, un círculo que incluya la casa,
+proyectando sombra).
+
+1. **Filamentos: mismo `dentroDeLaHabitacion` + reintento que las
+   toperas (checkpoint 13), aplicado ahora también aquí.** No había
+   ningún chequeo — `construirFilamentos` solo recibía `radioIsla`, sin
+   `geo`. Se le añadió el parámetro y el mismo bucle `do...while` con
+   tope de 30 intentos y margen 0.3 (más pequeño que el 0.5 de las
+   toperas: un filamento es una brizna fina, no necesita tanto colchón
+   respecto a la pared).
+
+2. **Piedras del muro: 62→90, y el rango de anchura también algo mayor
+   (0.075-0.105 → 0.09-0.125 de `radioIsla`).** El hueco no era un
+   problema de cantidad insuficiente sin más, sino de que cada piedra
+   tiene su propia rotación (`rotation.y = angulo*3.7`) sobre una
+   geometría facetada e irregular (icosaedro de baja subdivisión), así
+   que su anchura real en la dirección tangencial varía bastante de una
+   piedra a otra — con el espaciado angular de 62 piedras, las que
+   caían "de canto" no llegaban a solapar con sus vecinas. Más cantidad
+   (menos espaciado angular) y más anchura media dejan margen incluso
+   para la peor rotación posible.
+
+3. **Noche más cálida: tres colores nuevos, no solo el tramo nublado
+   (ya arreglado en el checkpoint 13).** `COLOR_NOCHE` (horizonte de
+   cielo despejado nocturno) pasó de `0x050509` (casi negro con deje
+   azul) a `0x1c1220` (morado oscuro cálido); el cénit nocturno pasó de
+   negro puro `0x000000` a `0x0a0710` (mismo tinte cálido, más oscuro
+   que el horizonte); y los grises del tramo NUBLADO nocturno
+   (`grisHorizonte`/`grisCenit`, ya corregidos una vez en el checkpoint
+   13 pero todavía fríos/azulados) pasaron a tonos con un toque
+   marrón/ámbar apagado (`0x352d28`/`0x1c1712`) en vez de azul-gris.
+   Verificado con captura de noche despejada y de noche muy nublada.
+
+4. **Farola nueva — el diseño dio dos vueltas, el primer intento tenía
+   un bug real de raíz, no solo de ajuste fino.** Primer diseño: poste
+   en la esquina de la casa contraria al árbol (misma técnica que
+   `construirBuzon`, pero comparando la proyección de las 4 esquinas
+   reales de la habitación sobre el mismo `perp` — perpendicular a la
+   cámara — que ya usa `construirArbol` para posicionarse: no es el
+   mismo error de ejes que costó el bug del árbol/las toperas, porque
+   aquí no se comprueba si un punto cae DENTRO de la habitación —eso sí
+   exige los ejes propios de la habitación—, sino cuál de las 4 esquinas
+   ya conocidas está más lejos del árbol a lo largo del eje que el
+   propio árbol usa para colocarse), con el foco apuntando al CENTRO de
+   la casa (0,0,0 de mundo) y una intensidad alta (420). Resultado real
+   (captura de noche): un tajo de luz muy intenso entrando en diagonal
+   por el hueco del techo invisible, con un borde muy duro — nada que
+   ver con un círculo cálido bajo una farola. Diagnóstico: con la cabeza
+   de la farola casi a la misma altura que el techo invisible (que SÍ
+   proyecta sombra, `construirTecho`) y el objetivo al otro lado de la
+   habitación, el haz tenía que atravesar ese plano en un ángulo tan
+   rasante que la sombra no lo bloqueaba de forma fiable — el mismo tipo
+   de problema de ángulo rasante que ya había costado ajustar el bias de
+   la sombra del sol (checkpoint 12), aquí con una luz nueva sin esos
+   ajustes. En vez de perseguir el bias/ángulo exacto para este caso
+   concreto, se cambió el diseño de raíz: el foco apunta ahora recto
+   hacia ABAJO desde la propia cabeza (mismo X/Z, Y=0), no al centro de
+   la casa — el círculo de luz queda pegado a la esquina exterior,
+   tocando la fachada y la hierba de alrededor, sin que el haz necesite
+   cruzar nunca el hueco del techo. Efecto secundario esperado: la
+   intensidad bajó de 420 a 55 (con `decay` físico normal, 2, en vez del
+   1.6 más lento del primer intento) porque el objetivo pasó de estar a
+   6-9m (centro de la casa) a ~2.5m (la propia altura de la cabeza) —
+   con caída inversa al cuadrado, la misma intensidad a esa distancia
+   mucho menor saturaba la escena entera. Encendida solo de noche
+   (intensidad y `emissiveIntensity` de la bombilla escaladas por
+   `nocturnidadActual`, la misma rampa crepuscular que ya atenúa el sol)
+   — de día se ve como una farola apagada, no como una bombilla
+   encendida bajo el sol. Geometría: poste + brazo corto tipo "cobra"
+   que se adelanta un poco hacia la casa + pantalla (cono truncado
+   abierto) + bombilla emissive, todo formas simples sin textura, mismo
+   criterio que el buzón/árbol.
+
+### Fase 6 — Escena 3D (checkpoint 15: más zoom, farola proporcional, cielo más vivo, polvo en retrato y de noche, farola con nubes)
+
+Pedido explícito tras ver el checkpoint 14 ("se ve mejor"): la isla más
+pequeña para poder acercar más el zoom; la farola más grande y
+proporcional a la casa (más alta que ella); el azul del cielo "no
+convence", más vivo, teniendo en cuenta que será el fondo de la app;
+revisar el modo vertical (el polvo del viento no llega arriba del todo);
+el polvo de noche "brilla demasiado, parecen luciérnagas"; y que la
+farola se encienda también con más de un 75% de nubes, no solo de noche.
+
+1. **Isla: `radioIsla` de `radioHabitacion * 1.9` (checkpoint 11) a
+   `* 1.4`.** Es el mayor contribuyente al radio de encuadre de la
+   cámara (`calcularRadioEscena`), así que encogerla es lo que de verdad
+   permite acercar el zoom sin tocar `CAMARA_MARGEN` — la casa sigue
+   teniendo sitio alrededor, solo que menos que en el checkpoint 11 (que
+   la había agrandado por el motivo contrario, "me da claustrofobia").
+
+2. **Farola: altura derivada de `geo.altura`, no una constante fija —
+   y un bug de autosombra nuevo, encontrado tras escalarla.**
+   `ALTURA_FAROLA` (2.6 fijo, checkpoint 14) pasa a `alturaFarola =
+   geo.altura * 1.55` (más alta que el tejado, no solo igualada); el
+   resto de medidas del bloque (radio del poste, alcance del brazo,
+   tamaño de pantalla/bombilla) se pensaron para una altura de
+   referencia de 2.6, así que se escalan dentro de la función en la
+   misma proporción (`escala = alturaFarola / 2.6`) para que crezca
+   entera, no solo el poste. Efecto en cadena esperado: con la cabeza
+   más lejos del suelo, la misma intensidad (55, con `decay` físico 2)
+   se ve más tenue — compensado multiplicando por `escala ** 2`
+   (iluminancia con caída inversa al cuadrado de la distancia).
+   **Bug real, encontrado en captura con 90% de nubes (que ya encendía
+   la farola de día, ver decisión 6): una cuña oscura triangular
+   grande cortaba el charco de luz, justo donde no debería haber
+   sombra.** No era la pantalla (se probó quitándole `castShadow`
+   primero — la cuña seguía ahí) ni bastaba con eso: el brazo y el
+   poste, con la farola ya escalada, se acercan lo bastante a la
+   cabeza/al eje del foco (que apunta recto hacia abajo desde la propia
+   cabeza) como para meterse dentro del cono de luz (ángulo ancho, 45°)
+   cerca de su vértice — un occlusor pequeño ahí proyecta una cuña
+   grande sobre TODO el círculo, no una sombra puntual. Se aisló
+   probando uno a uno (pantalla → seguía; brazo → seguía; poste →
+   desapareció del todo) hasta confirmar que las TRES piezas de la
+   propia farola necesitaban `castShadow = false`: ninguna pieza de la
+   farola necesita proyectar su propia sombra sobre el charco de luz que
+   ella misma produce; el resto de la escena (casa, rocas, buzón, árbol)
+   sigue recibiendo sombra de este foco con normalidad.
+
+3. **Cielo de día: azul más vivo.** `horizonteDia`/`cenitDia`
+   (`0xbde4f7`/`0x4a9bd6`, checkpoints 6-14) se veían apagados — pedido
+   explícito, con la consideración añadida de que este cielo será el
+   FONDO de la app entera al integrarse con el dashboard, no solo un
+   detalle de la escena aislada. Más saturación y luminosidad en los dos
+   extremos del degradado (`0x8fe0fb`/`0x1f8fe0`), no solo en uno.
+
+4. **Polvo en retrato: mismo criterio que `techoCielo()` (nubes,
+   checkpoint 6), aplicado ahora también al viento.** `construirViento`
+   no recibía `aspecto`, así que la franja vertical del polvo
+   (`alturaCentro`/`mitadAltura`) era siempre la de landscape, sin
+   aprovechar el sobrante de cielo que `construirCamara` ya deja en
+   retrato (el alto del encuadre se deriva del ancho, no al revés).
+   `factorVertical = aspecto<1 ? 1/aspecto : 1` escala ambos valores
+   igual que ya hacía `techoCielo()` para las nubes; en landscape el
+   factor es 1, sin cambios.
+
+5. **Polvo de noche: opacidad atenuada por `nocturnidadActual`, no
+   fija.** `THREE.PointsMaterial` no reacciona a la luz de la escena —
+   su brillo es siempre el definido en el material, así que con la
+   escena a oscuras el polvo (y las hojas) se leían como una fuente de
+   luz propia en vez de una mota iluminada por el sol/ambiental (que sí
+   se atenúan de noche) — de ahí el "parecen luciérnagas". Factor
+   `1 - 0.65*nocturnidadActual` multiplicando la opacidad de cabeza,
+   estela y hojas por igual.
+
+6. **Farola: también se enciende con mucha nube, no solo de noche.**
+   `factorEncendida = Math.max(nocturnidadActual, factorNubesFarola)`,
+   con `factorNubesFarola` en rampa corta 75%→85% (mismo criterio de
+   transición suave que ya usa `factorCrepusculo()`) en vez de un
+   interruptor brusco al cruzar el 75%. El máximo de las dos rampas, no
+   la suma — a mediodía con 90% de nubes no debería encenderse "más"
+   que de noche con cielo despejado, solo tan encendida como cualquiera
+   de las dos condiciones por separado. Sustituye a `nocturnidadActual`
+   a secas tanto en la intensidad del foco como en el `emissiveIntensity`
+   de la bombilla.
+
+### Fase 6 — Escena 3D (checkpoint 16: farola +50% en la ventana trasera con piezas bien unidas, zoom máximo, isla sin achatar en retrato)
+
+Pedido explícito tras ver el checkpoint 15: la farola un 50% más
+grande; en medio de la ventana de atrás, no en una esquina; el brazo y
+la pantalla no quedaban bien unidos al poste; arreglar también la
+sombra del poste; todo el zoom posible (en el móvil se ve pequeño);
+que la anchura de la isla encaje con la anchura del móvil; y una
+sospecha del usuario a comprobar — "cuando se pone en vertical la isla
+se achata un poco y pierde las proporciones, ¿es posible?".
+
+1. **Farola +50%: un solo factor.** `FACTOR_ALTURA_FAROLA_SOBRE_CASA`
+   de 1.55 a `1.55 * 1.5`. Como el resto de medidas del bloque
+   (radio del poste, alcance del brazo, tamaño de pantalla/bombilla) ya
+   escalaban con `escala = alturaFarola/ALTURA_FAROLA_REFERENCIA`
+   (checkpoint 15), subir este único factor agranda la farola entera de
+   forma coherente, no solo la altura.
+
+2. **Reposicionada al centro de la ventana trasera, no a una esquina.**
+   La "ventana de atrás" es el cristal cuya normal apunta EN CONTRA de
+   la cámara (`signoHaciaCamara` da -1): el que queda al fondo, más
+   pequeño/lejano en el encuadre isométrico. `pared.centro` ya da el
+   punto medio real de esa pared (mismo sistema de coordenadas rotado
+   que las esquinas), así que centrar la farola ahí es directo — se
+   quitó todo el cálculo de esquina/`perp` del diseño anterior (y su
+   comentario sobre "esquina contraria al árbol", que ya no aplica).
+   **Bug real de la primera versión de este cambio:** con el mismo
+   `margenFuera=0.9` fijo que ya usaba el buzón (pensado para una
+   farola a escala de referencia), el poste quedaba pegado al marco de
+   la ventana, casi fundido visualmente con él en captura real — se
+   corrigió escalando también `margenFuera` por `escala`, para que la
+   separación crezca junto con el resto de la farola.
+
+3. **Brazo y pantalla no estaban bien unidos — bug real, no solo un
+   ajuste de posición.** El brazo del checkpoint 14/15 era un cilindro
+   HORIZONTAL a una altura fija (`alturaFarola - 0.05*escala`) que no
+   coincidía ni con la punta real del poste (`alturaFarola`) ni con la
+   parte superior de la pantalla (bastante más abajo,
+   `cabezaY + alturaPantalla/2`) — quedaba flotando entre las dos
+   piezas sin tocar ninguna, un hueco que antes pasaba desapercibido a
+   la escala de referencia pero se notaba mucho más ya agrandada.
+   Reescrito como un cilindro DIAGONAL, orientado con un cuaternión
+   (`Quaternion.setFromUnitVectors`) desde la punta real del poste
+   hasta el borde superior real de la pantalla — encaja a ras con las
+   dos piezas sea cual sea `escala`, sin coordenadas ajustadas a mano
+   que se puedan volver a desincronizar si la farola cambia de tamaño
+   otra vez.
+
+4. **Sombra del poste reactivada — y esta vez sin que reaparezca la
+   cuña del checkpoint 15.** El checkpoint 15 había desactivado
+   `castShadow` en poste+brazo+pantalla enteros para quitar una cuña de
+   autosombra; pedido explícito de recuperar al menos la del poste. Se
+   reactivó solo la del poste y se verificó en captura (con la escena
+   muy nublada, que enciende la farola de día) que no reaparecía
+   ninguna cuña — con el brazo ya diagonal (decisión 3) en vez del
+   horizontal fijo de antes, ya no pasa tan cerca del vértice del cono
+   de luz. La pantalla y el nuevo brazo diagonal se dejaron sin
+   `castShadow` (mismo riesgo geométrico que ya causó el bug real una
+   vez, no se ha vuelto a probar reactivarlos).
+
+5. **Zoom: `CAMARA_MARGEN` de 1.28 a 0.92, en dos pasos verificados con
+   captura.** Primero a 1.05 (verificado sin recorte en landscape,
+   retrato y con la farola ya más alta/nubosa, el elemento más alto de
+   la escena); confirmado que aún quedaba margen de sobra, bajado otra
+   vez a 0.92 y vuelto a verificar en los cuatro casos límite (día/noche
+   × landscape/retrato) antes de darlo por bueno — con la farola ahora
+   el elemento más alto de la escena, es el candidato más probable a
+   recortarse primero si el margen se pasa de ajustado.
+
+6. **Isla achatada en retrato: la sospecha del usuario era un bug real,
+   confirmado con álgebra antes de tocar ningún valor — no solo "se ve
+   un poco raro".** `alcanceVertical = alcanceBase/aspecto` (checkpoint
+   5) asumía un frustum vertical SIMÉTRICO (arriba=abajo=alcanceVertical,
+   span total `2×alcanceVertical`) para que
+   `alcanceHorizontal/alcanceVertical` coincidiera con `aspecto` (la
+   proporción real del canvas) y así no deformar nada. Pero en retrato
+   arriba/abajo NO son iguales (2.2/0.5, checkpoint 5, "casa abajo,
+   cielo arriba"): el span vertical real es
+   `(2.2+0.5)×alcanceVertical = 2.7×alcanceVertical`, no
+   `2×alcanceVertical` como asumía la fórmula — con esa asimetría sin
+   compensar, la proporción horizontal/vertical del frustum quedaba por
+   debajo de lo que pedía `aspecto` (un factor 2/2.7 ≈ 0.74), así que
+   el mundo se veía más aplastado verticalmente de lo que el canvas
+   permitía: exactamente el achatamiento que describía el usuario, y
+   llevaba ahí desde el checkpoint 5 sin que nadie lo hubiera notado
+   hasta ahora. Corregido escalando `alcanceVertical` por
+   `2/(2.2+0.5)` para que el span vertical real (arriba+abajo) sí
+   mantenga la proporción con `alcanceHorizontal` que pide `aspecto`,
+   sin tocar la composición 2.2/0.5 en sí (sigue siendo "más cielo
+   arriba que hierba abajo", solo que ahora sin distorsionar el
+   resultado). De paso resuelve también el pedido de "que la anchura de
+   la isla encaje con el móvil": al ser `alcanceHorizontal` el mismo
+   valor en todos los aspectos de retrato (no escalaba con el ancho real
+   de la pantalla), la combinación de esta corrección con el zoom más
+   ajustado (decisión 5) es lo que de verdad acerca la isla a los bordes
+   de la pantalla en vez de dejar margen sin usar a los lados.
+
+### Fase 6 — Escena 3D (checkpoint 17: farola vintage con luz puntual, sustituye al diseño "cobra")
+
+Pedido explícito tras ver el checkpoint 16: "se me queda una zona muy
+oscura. cambia esa farola por una de las vintage, de esas que son más
+bajitas pero alumbran más horizontalmente. prueba con una sola primero
+— si sigue quedando oscuro, movemos el árbol y ponemos dos, una en cada
+esquina".
+
+1. **Sustitución completa del diseño "cobra" (checkpoints 14-16), no un
+   añadido en paralelo.** `construirFarola` se reescribió entera:
+   desaparecen el brazo lateral, la pantalla cónica y el `SpotLight`
+   estrecho hacia abajo; entra un poste más corto (sin brazo, el
+   farolillo va centrado justo encima), un farolillo (caja con material
+   emissive cálido simulando el cristal) rematado en un cono con pomo, y
+   una `THREE.PointLight` en el centro del farolillo. La causa raíz del
+   "queda una zona muy oscura" era estructural, no un ajuste de
+   intensidad: un `SpotLight` con ángulo de 45° concentra toda su luz en
+   un cono hacia abajo — por diseño, no puede iluminar nada FUERA de
+   ese cono por mucha intensidad que se le suba. Un `PointLight` reparte
+   la misma energía en todas direcciones alrededor del punto, que es
+   literalmente "alumbrar más horizontalmente" — efecto secundario
+   observado y bienvenido: también ilumina el interior de la casa a
+   través del cristal cercano, algo que el cono estrecho del diseño
+   anterior nunca llegaba a tocar.
+
+2. **Altura: más baja a propósito, y ya no necesita ser "más alta que la
+   casa".** `FACTOR_ALTURA_FAROLA_SOBRE_CASA` de 2.325 (checkpoint 16)
+   a 1.3 — pedido explícito ("más bajitas"). El requisito de "más alta
+   que el tejado" del diseño anterior (checkpoint 14) existía solo para
+   que el brazo lateral no tuviera que cruzar el hueco del techo
+   invisible en diagonal; sin brazo (todo el farolillo queda centrado
+   en el eje del poste, fuera de la huella de la casa por la propia
+   posición junto a la ventana trasera) ese problema no puede repetirse,
+   así que no hacía falta mantener la restricción de altura.
+
+3. **Misma posición que el diseño anterior (centro de la ventana
+   trasera), reutilizando `signoHaciaCamara`/`paredTrasera` tal cual.**
+   No pedido explícito de cambiar dónde va, solo de cambiar QUÉ es — se
+   mantuvo la posición ya validada en el checkpoint 16 en vez de
+   reabrir esa decisión sin necesidad.
+
+4. **Intensidad de la `PointLight`: encontrada a ojo con captura real,
+   mismo patrón de siempre en este bloque.** `10 * escala**2 *
+   factorEncendida` — el exponente 2 por el mismo motivo que ya
+   justificaba el diseño anterior (con `decay` físico 2, la iluminancia
+   cae con el cuadrado de la distancia al farolillo, que se aleja del
+   suelo en proporción a `escala`). El propio criterio de encendido
+   (`factorEncendida`: noche o >75% de nubes, checkpoint 15) y el
+   `emissiveIntensity` del farolillo (atenuado de día, intenso de
+   noche/nublado) se reutilizaron sin cambios — la lógica de "cuándo se
+   enciende" no dependía del diseño físico de la farola.
+
+5. **Zona oscura: mejor, pero no resuelta del todo — decisión pendiente
+   del usuario, no autónoma de Claude.** En captura de noche con esta
+   única farola vintage, el interior de la casa y la hierba alrededor
+   de la ventana trasera quedan bien iluminados, pero el lado opuesto
+   (donde está el árbol, y hacia el buzón) sigue relativamente oscuro —
+   una sola fuente de luz en un lado de una isla grande no puede cubrir
+   el lado contrario sin más alcance del que se ha probado. Pedido
+   explícito de ENSEÑAR primero este resultado antes de decidir si hace
+   falta mover el árbol y añadir una segunda farola en la esquina
+   opuesta — no se ha tomado esa decisión todavía, queda para la
+   siguiente ronda según lo que decida el usuario al ver las capturas.
+
+### Fase 6 — Escena 3D (checkpoint 18: farola en la esquina del tejado, farolillo con varillas, propuestas de iluminación sin implementar)
+
+Pedido explícito tras confirmar que el checkpoint 17 "mejora" el
+resultado: mover la farola a la esquina de arriba del todo (a ver si
+alumbra más); mejorar el farolillo ("es un cubo cutre"), con las cuatro
+varillas metálicas típicas de estas farolas; y proponer (sin
+implementar) alguna forma bonita de iluminar el resto del mapa.
+
+1. **Posición: la esquina del tejado más opuesta a la cámara, no el
+   centro de la ventana trasera.** Todas las esquinas del tejado están
+   a la misma altura de mundo; la que se proyecta "más arriba" en la
+   pantalla fija es la que queda más lejos de la cámara en su propia
+   dirección de vista — se calcula igual que la esquina "contraria al
+   árbol" del checkpoint 14 (mínima proyección sobre un vector de
+   referencia), pero aquí el vector es `dirCamaraXZ` en vez de `perp`.
+   Efecto secundario confirmado en captura: al estar en la esquina más
+   alta/lejana del tejado, la luz llega un poco más lejos hacia el lado
+   del árbol/buzón que en el checkpoint 17, aunque esa zona sigue sin
+   estar tan iluminada como el lado de la ventana.
+
+2. **Farolillo: cuatro varillas metálicas en las esquinas, mismo
+   principio que el marco de las ventanas de la casa.** Un cubo de
+   cristal liso (checkpoint 17) no se lee como un farol vintage de
+   verdad — el detalle que lo distingue es el marco de hierro forjado
+   en las esquinas, igual que `construirMarcoVentana` ya usa un marco
+   delgado por encima del cristal en vez de una pieza nueva compleja.
+   Las varillas (`BoxGeometry` finas) sobresalen un poco por arriba y
+   por abajo del propio cristal (`alturaVarilla = alturaFarolillo *
+   1.2`, no exactamente `alturaFarolillo`) para que se lean como postes
+   que sujetan el farolillo, no como cuatro listones pegados a él sin
+   más.
+
+3. **Propuestas de iluminación para el resto del mapa — pedido
+   explícito de NO implementar, solo proponer.** Ver la respuesta al
+   usuario en la conversación para el detalle completo; en resumen, se
+   propusieron: una `HemisphereLight` tenue solo de noche (barata, sin
+   sombra, levanta un poco el negro más puro sin aplastar el contraste
+   real de la farola); un farolillo colgado del propio árbol (reutiliza
+   un objeto que ya existe, sin poste nuevo); y una hilera de luces
+   pequeñas tipo guirnalda a lo largo del muro de piedras del borde de
+   la isla (varios puntos de luz muy débiles, look "acogedor" barato).
+   Ninguna se ha implementado — queda pendiente de que el usuario elija
+   si quiere alguna antes de tocar el código.
+
+### Fase 6 — Escena 3D (checkpoint 19: farolillo del árbol, farola de vuelta a la ventana, luna real con fase y estrellas)
+
+Pedido explícito tras el checkpoint 18: el farolillo colgado del árbol
+(de la lista de propuestas); arreglar la sombra de la farola para que
+las varillas no cuenten; la farola de vuelta al centro de la ventana
+(no la esquina); la luz de cielo tenue propuesta también; y que la
+noche tenga en cuenta la luna real (fase, no posición exacta) con
+estrellas cuya cantidad dependa de ella.
+
+1. **Farola: de vuelta al centro de la ventana trasera.** La esquina
+   del tejado (checkpoint 18) no compensaba lo bastante el pedido
+   original de "alumbra más" como para justificar perder la composición
+   centrada contra el cristal — se revirtió a la lógica de
+   `paredTrasera` del checkpoint 16.
+
+2. **Sombra de la farola: las 4 varillas del farolillo pasan a
+   `castShadow=false`.** Mismo problema estructural que ya costó una
+   ronda de bugs en el diseño "cobra" (checkpoints 15-16): las varillas
+   rodean la propia `PointLight` a muy poca distancia (están pegadas al
+   mismo farolillo donde vive el foco), así que proyectaban una sombra
+   en cruz sobre el propio charco de luz que la farola produce, en vez
+   de una sombra útil sobre otra cosa.
+
+3. **Farolillo colgado del árbol — bug real de posición, la primera
+   versión era literalmente invisible.** Cuerda + cajita cálida +
+   `PointLight` propia (mismo criterio de encendido que la farola:
+   noche o >75% de nubes, reutilizando `UMBRAL_NUBES_FAROLA`/
+   `RAMPA_NUBES_FAROLA`). El primer punto de enganche
+   (`alturaTronco + radioCopaBase*0.55`) caía DENTRO del volumen de la
+   bola principal de la copa (la más baja de las tres,
+   `PATRON_COPA[0]`, con la única de las bolas que baja hasta
+   `alturaTronco - radioCopaBase*0.3`) — el farolillo quedaba enterrado
+   dentro del follaje opaco, invisible aunque la geometría estuviera
+   ahí de verdad. Corregido colgándolo bastante por debajo del punto
+   más bajo real de la copa, no solo desplazado a un lado (un
+   desplazamiento lateral pequeño seguía cayendo dentro del radio de la
+   bola a esa altura).
+
+4. **Luz de cielo tenue: `HemisphereLight`, sin sombra, modulada por la
+   fase lunar real.** Propuesta ya descrita en el checkpoint 18,
+   implementada tal cual: nula de día, y de noche entre 0.05 (luna
+   nueva) y 0.22 (luna llena) — "si hay luna llena que alumbre un poco,
+   si hay luna nueva que esté más oscuro" también se cumple aquí, no
+   solo en el disco visible de la luna.
+
+5. **`src/data/luna.js`, módulo nuevo — misma fase real para todo,
+   posición no.** `getMoonIllumination(fecha)` de SunCalc (ya
+   dependencia del proyecto desde la Fase 2) da `fraction` (0=nueva,
+   1=llena) y `waxing` (creciente/menguante) sin necesitar lat/lon — a
+   diferencia de la posición solar, la fase lunar es la misma para
+   cualquier ubicación de la Tierra en un instante dado. No se usa
+   `getMoonPosition` (la posición real en el cielo) — pedido explícito:
+   "la luna tampoco tiene que estar en el sitio exacto". Calculado en
+   `main-escena3d.js` a partir de la misma `fecha` que ya controla el
+   resto de la escena (real o de depuración), sin ningún override nuevo
+   en `depuracion.js` — no hace falta, la fecha ya se puede forzar con
+   `?debugHora=`.
+
+6. **Luna: dos rondas de bugs reales, cada una diagnosticada con
+   evidencia antes de tocar el código a ciegas.**
+   - **No aparecía en NINGUNA captura, con ningún ancla/altura probado
+     a mano.** Se probaron tres combinaciones razonadas a partir de las
+     coordenadas ya usadas por nubes/rayo (mismo "cuadrante seguro") sin
+     éxito. Diagnosticado colocando temporalmente varios marcadores de
+     colores en distintas coordenadas candidatas (borrados del código
+     una vez confirmado el resultado, no dejados como deuda) y
+     capturando de día para verlos con claridad: reveló que ni siquiera
+     las coordenadas "seguras" de las nubes lo son para un objeto
+     pequeño — las nubes se ven en esas posiciones porque son sprites
+     grandes cuyo borde asoma al encuadre aunque su centro quede fuera;
+     un objeto pequeño en el mismo punto no asoma nada. Con marcadores
+     de prueba en magnitudes bastante más moderadas sí aparecieron
+     limpiamente dentro de encuadre — la luna final usa una de esas
+     coordenadas confirmadas (`x:-0.15, z:-0.3` a 0.45×radio de altura).
+   - **Con la posición ya arreglada, la FORMA salía invertida: luna
+     nueva se veía como un disco lleno y brillante, luna llena salía
+     apagada/gris — justo al revés.** El primer algoritmo (arco de
+     semicírculo fijo + elipse del terminador recortada con ángulos y
+     "sweep flags" elegidos a ojo) tenía la lógica de qué zona
+     dibujar/qué zona no invertida, y depurar ángulos de arco a ciegas
+     no es fiable. Reescrito con una técnica mucho más fácil de
+     verificar paso a paso: recortar el canvas al disco
+     (`ctx.clip()`), rellenar la MITAD iluminada con un rectángulo llano
+     (sin elipses todavía), y luego SUMAR o RESTAR una elipse completa
+     (0 a 2π, sin ángulos parciales) con `globalCompositeOperation`
+     (`destination-out` para recortar un creciente, `source-over` para
+     añadir una gibosa) según si la fracción iluminada es menor o mayor
+     que la mitad — cada uno de los tres casos límite (nueva, mitad,
+     llena) se puede razonar a mano sin ambigüedad antes de escribirlo.
+     Verificado con captura real en los tres casos tras el cambio.
+
+### Fase 6 — Escena 3D (checkpoint 20: luna más pequeña, dos bugs de halo, estrellas a ambos lados, sombra real de la farola)
+
+Pedido explícito tras ver el checkpoint 19: la luna es enorme y está en
+medio de la pantalla, debería estar más arriba/detrás de la isla; solo
+hay estrellas a la izquierda, en exceso, deberían salir aleatorias por
+toda la pantalla pero más arriba (menos luz cuanto más arriba); la luna
+tiene un cuadrado blanco visible; y la farola sigue con sombras mal —
+"las varillas verticales no deberían producir sombra". Pedido explícito
+de comprobar la escena y repetir el proceso si algo seguía mal — dos de
+los cuatro puntos necesitaron una segunda vuelta tras la primera
+corrección.
+
+1. **Luna: mucho más pequeña y más arriba, misma dirección horizontal ya
+   calibrada.** Tamaño de 0.32×radio a 0.13×radio (menos de la mitad);
+   altura de 0.45×radio a 0.6×radio, misma técnica de calibración con
+   marcadores de colores temporales (confirmado dentro de encuadre a
+   esa altura mayor, sin recorte).
+
+2. **Cuadrado blanco alrededor de la luna: el radio exterior del
+   degradado del halo se salía del propio lienzo.** Con `tam=128` el
+   lienzo mide `±64` desde el centro, pero el degradado llegaba hasta
+   `r*2`≈102 — en los bordes y esquinas del cuadrado, el degradado
+   TODAVÍA no había llegado a alpha 0 cuando se acababa el área
+   dibujada, dejando un tinte con forma de cuadrado. Bajado a `r*1.15`
+   (≈59, claramente por debajo de 64) para que llegue a alpha 0 de
+   verdad dentro del lienzo.
+
+3. **Anillo brillante en el borde del disco — apareció DESPUÉS de
+   arreglar el cuadrado, mismo halo pero un bug distinto.** El halo se
+   pintaba ANTES que el disco/terminador; la resta `destination-out` del
+   terminador (luna nueva/creciente) no distingue de qué capa viene cada
+   píxel — borraba también el halo ya pintado justo dentro del radio del
+   disco, dejando el interior a alpha 0 mientras el halo seguía intacto
+   justo fuera de ese radio: el salto entre "borrado dentro" e "intacto
+   fuera" se leía como un anillo brillante pegado al borde, muy visible
+   en luna nueva. Diagnosticado ampliando mucho una captura real del
+   disco (no a simple vista en el encuadre normal). Arreglado moviendo
+   el halo al FINAL, con `destination-over` (rellena por detrás de lo ya
+   dibujado, sin que nada posterior pueda volver a borrarlo) — así
+   ninguna operación sobre el disco puede afectarlo, salga la fase que
+   salga. De paso, el disco base tenue (para que la luna nueva no fuera
+   invisible del todo) pasó de un `rgba` de alpha plano a su propio
+   degradado radial que ya llega a 0 en el radio `r` — el relleno plano
+   anterior, recortado en seco justo en ese borde, había sido la
+   PRIMERA versión (fallida) de intentar arreglar este mismo anillo,
+   antes de encontrar la causa real en el orden de dibujo del halo.
+
+4. **Estrellas: solo aparecían a la izquierda porque solo se había
+   calibrado esa zona (`ANCLAS_NUBE`).** Mismo método de marcadores de
+   colores, esta vez explorando el lado derecho del encuadre: dos puntos
+   nuevos confirmados visibles (`ANCLAS_ESTRELLAS_DERECHA`,
+   `{x:0.15,z:0.3}` y `{x:0,z:0.4}`). Cada estrella elige ahora al azar
+   entre las anclas de AMBOS lados (`Math.random()`, no `i % length`
+   como antes — eso repartía las anclas en un patrón fijo y predecible
+   en vez de verdaderamente al azar). Para la densidad "más arriba,
+   menos abajo" (pedido explícito, "cuanto más abajo más luz hay"): la
+   altura ya era aleatoria (`Math.random()` simple), pero uniforme —
+   `Math.random() ** 1.8` sesga el resultado hacia 1 (arriba) sin dejar
+   de ser aleatorio, en vez de cambiar a un reparto no aleatorio.
+
+5. **Sombra "mal" de la farola: no eran las varillas — ya se habían
+   arreglado en el checkpoint 19 (sin `castShadow` desde entonces).**
+   Confirmado en captura real ampliada de la base de la farola: una
+   mancha oscura grande y redondeada pegada al pie del poste, no una
+   sombra fina en cruz (que sí habría apuntado a las varillas). Causa
+   real: el foco (`PointLight`) no tiene desplazamiento propio en X/Z —
+   vive exactamente encima del eje del poste — así que el POSTE (y la
+   BASE, mismo eje) quedan literalmente debajo del punto de luz,
+   bloqueando su reparto omnidireccional en todas direcciones a la vez
+   alrededor de su propia base. Arreglado quitando `castShadow` también
+   del poste y la base (mismo criterio ya aplicado a pantalla/brazo en
+   el diseño "cobra" y a las varillas en el checkpoint 19: ninguna pieza
+   de la farola necesita proyectar sombra sobre el charco de luz que
+   ella misma produce). El resto de la escena sigue recibiendo sombra
+   real de este foco con normalidad.
+
+### Fase 6 — Escena 3D (checkpoint 21: halo de la luna sin blanco en el lado oscuro, estrellas más pequeñas/variadas, shadow acne real, farola más lejos y alta)
+
+Pedido explícito, en el mismo mensaje que reportaba que el checkpoint 20
+no se notaba todavía: la luna tiene "una cosa blanca donde debería ser
+oscura"; a veces salen estrellas encima de la luna; bajar tamaño y
+densidad de las estrellas, con variación de tamaño/brillo y un filtro
+que las haga brillar menos cuanto más abajo; la sombra de la farola
+"sigue estando ahí... una sombra cuadrada que envuelve la farola"; el
+techo hace algo raro con su propia sombra; aleja la farola de la
+ventana y hazla un 20% más alta; en vertical la luna debería salir en
+la parte más alta; y las paredes (sobre todo la translúcida) generan
+mal la sombra, con luz visible en la parte de abajo.
+
+1. **Halo de la luna: tercer bug real en el mismo degradado, encontrado
+   tras arreglar el cuadrado (checkpoint 20) y el anillo (mismo
+   checkpoint).** Con el halo ya movido al final vía `destination-over`
+   (arreglo del anillo), ese modo de composición solo respeta lo que YA
+   HAY cuando ya hay algo con alpha>0 — en el lado oscuro de una luna
+   nueva/creciente (que el terminador deja en alpha 0 de verdad, no solo
+   tenue), no había nada que respetar, así que el halo se pintaba ahí
+   como si fuera la única capa, con su radio interior a alpha plano
+   0.35: inundaba el lado oscuro entero de blanco sólido. Arreglado
+   recortando el halo a un ANILLO real (`Path2D` con dos arcos y regla
+   `evenodd`, entre `r` y `r*1.15`) que no puede pintar nada dentro del
+   propio radio del disco — así da igual qué haya o no haya ahí dentro,
+   y el orden de dibujo deja de importar del todo.
+
+2. **Estrellas encima de la luna: exclusión por distancia XZ al ancla de
+   la luna, mismo patrón `do...while` con reintento que ya usan las
+   toperas.** `ANCLA_LUNA` se extrajo como constante compartida entre
+   `construirLuna` y `construirEstrellas` para no duplicar el valor.
+   Radio de exclusión 0.2 (unidades de `radio` de escena).
+
+3. **Estrellas: menos densidad (220→130), menos tamaño, y variación real
+   de tamaño/brillo con un filtro de altura.** `PointsMaterial.size` es
+   un único escalar por `Points` (no admite tamaño por vértice sin
+   shader propio, mismo límite ya documentado para lluvia/polvo) — la
+   variación de TAMAÑO viene de `NIVELES_ESTRELLAS`, 3 grupos con su
+   propio `size` (más estrellas pequeñas que grandes). La variación de
+   BRILLO sí es continua: `vertexColors` sí admite un valor por vértice,
+   así que cada estrella lleva su propio color (blanco escalado). El
+   "filtro" de brillo por altura reutiliza literalmente el mismo `t`
+   (0-1, sesgado hacia arriba) que ya decidía dónde cae la estrella —
+   la misma altura que la coloca decide también cuánto brilla, sin dos
+   cálculos separados.
+
+4. **Sombra "cuadrada que envuelve la farola": no era ninguna pieza de
+   la farola (poste/base ya sin sombra desde el checkpoint 20) — era
+   `remate` (el cono de remate encima del farolillo), el único occlusor
+   que quedaba pegado al foco.** Más ancho en su base que el propio
+   farolillo, justo encima del punto de luz, tapaba buena parte del
+   reparto omnidireccional. Quitado su `castShadow`, mismo criterio que
+   el resto de piezas de este bloque.
+
+5. **Shadow acne real y seria en toda la escena a sol rasante — no
+   descrita explícitamente por el usuario en este mensaje, encontrada al
+   diagnosticar visualmente el problema del techo/las paredes.**
+   Confirmado ampliando una captura a las 18:30: un patrón de rayado
+   fino cubría paredes/suelo/rocas por completo, "shadow acne" clásico.
+   Causa: `bias`/`normalBias` de la luz del sol no se habían retocado
+   desde el checkpoint 12, pero la farola (inexistente entonces) ha ido
+   agrandando `radio`/`alcanceSombra` desde el checkpoint 14 — con el
+   mismo `mapSize`, texels más grandes en unidades de mundo necesitan
+   más bias para el mismo resultado sin ruido. Subidos ambos
+   (`bias` -0.00012→-0.00035, `normalBias` 0.0015→0.004), re-verificado
+   con el mismo par de escenas límite que en el checkpoint 12 (rocas a
+   mediodía para "peter-panning", pared a sol rasante para acné) — el
+   acné desapareció y no reapareció el hueco de peter-panning.
+   **Pendiente:** los problemas concretos de "techo" y "pared
+   translúcida" que describió el usuario no se pudieron reproducir de
+   forma aislada tras arreglar el acné — es plausible que el ruido del
+   acné fuera la causa real de lo que se percibía como esos dos
+   problemas (un patrón de ruido denso se puede leer fácilmente como
+   "sombra que no empieza donde debería" o "luz colándose"), pero no se
+   ha confirmado con el usuario si siguen viéndose tras este arreglo.
+
+6. **Farola: más lejos de la ventana y un 20% más alta — cambios
+   directos, sin bug de por medio.** `margenFuera` de 0.9×escala a
+   1.8×escala (con la sospecha, no confirmada aún en este checkpoint, de
+   que estar tan pegada al marco de la ventana explicaba parte de la
+   sombra "cuadrada" — el marco SÍ proyecta sombra para el sol, y con la
+   farola tan cerca su `PointLight` también lo alcanzaba). Altura
+   ×1.2 sobre el factor ya existente.
+
+7. **Luna en retrato: altura atada a la misma proporción que ya usa
+   `techoCielo(aspecto)` para nubes/estrellas.** La altura fija (0.6×
+   radio) no aprovechaba el sobrante de cielo que el encuadre de retrato
+   ya reserva — `PROPORCION_ALTURA_LUNA = 0.6/1.15` mantiene la relación
+   ya calibrada en landscape pero deja que la altura real suba en
+   retrato exactamente igual que sube el techo del cielo.
+
+### Fase 6 — Escena 3D (checkpoint 22: farola rediseñada como poste en forma de horca)
+
+Pedido explícito, interrumpiendo una verificación en curso del
+checkpoint 21: "la farola no está quedando muy bien. en vez de eso pon
+un poste como en forma de horca del que cuelgue otro farolillo como el
+del árbol. que nazca de la hierba, no de las rocas como ahora" —
+sustitución completa de diseño, no un ajuste más sobre el "vintage".
+
+1. **`construirFarolilloColgante`, helper nuevo compartido entre el
+   árbol y la farola.** El farolillo colgado del árbol (checkpoint 18:
+   cuerda + cajita emissive + `PointLight`) se extrajo tal cual a una
+   función reutilizable, con `conSombra`/`alcanceSombra` opcionales (el
+   del árbol sigue sin sombra propia y con poca intensidad, decorativo;
+   el de la farola sí proyecta sombra real y tiene mucha más intensidad,
+   al ser ahora el único foco de la farola). `construirArbol` se
+   simplificó para llamar a este helper en vez de mantener su propia
+   copia del código.
+
+2. **La farola pasó de base+farolillo propio+varillas+remate (diseño
+   "vintage", checkpoints 17-21) a poste + brazo horizontal (silueta de
+   horca/gallows) + el MISMO farolillo colgante del árbol.** Mucha menos
+   geometría, y ya no hace falta ir desactivando `castShadow` pieza a
+   pieza en un cubo propio — el farolillo cuelga del EXTREMO del brazo,
+   desplazado hacia la casa, ya no "debajo" del punto de luz como pasaba
+   con el poste del diseño "vintage".
+
+3. **Bug real en el brazo de la horca, encontrado en la primera
+   captura: apuntaba siempre en la misma dirección fija, sin importar
+   hacia dónde estuviera la casa.** `rotation.z = Math.PI/2` tumba el
+   cilindro a lo largo del eje X LOCAL — que coincide con el eje X del
+   MUNDO porque este grupo no tiene ninguna rotación propia. `dirCasaX/
+   dirCasaZ` es una dirección arbitraria (depende de la orientación real
+   de la casa, spec.md ventana A = 248°), casi nunca alineada con el eje
+   X del mundo — así que solo la POSICIÓN del brazo se calculaba con
+   `dirCasaX/Z`, pero su orientación no, dejando un cilindro que no
+   conectaba de verdad el poste con el punto de enganche. Arreglado con
+   la misma técnica de "cilindro entre dos puntos" (cuaternión) que ya
+   usó el brazo diagonal del diseño "cobra" (checkpoint 16) — funciona
+   sea cual sea la orientación real de la casa, no solo por casualidad.
+
+4. **Poste plantado en la hierba, no en las rocas — dos intentos hasta
+   confirmarlo en captura real.** `margenFuera` (distancia desde la
+   ventana hacia fuera) heredaba el 1.8×escala del diseño "vintage"
+   anterior, que ya lo dejaba tocando el muro de piedras del borde de
+   la isla; bajado primero a 1.0×escala (seguía tocando las rocas en
+   captura) y después a 0.5×escala, confirmado ya claramente dentro de
+   la hierba.
+
+### Fase 6 — Escena 3D (checkpoint 23: farola de madera con tablas planas, agrandada y en la esquina simétrica al árbol)
+
+Pedido explícito tras ver el checkpoint 22: "lo de la madera del
+farolillo no has pillado lo que yo buscaba. me refería a algo más
+pequeño, con tablas planas. que sea una vertical, otra horizontal, y
+otra que sirva para sujetar la horizontal con la vertical, en un
+triángulo. de la horizontal, en el borde, cuelga el farolillo. pero es
+pequeño, como el del árbol. y los postes de madera también son más
+pequeños que el que has hecho" — y, en dos rondas posteriores dentro
+del mismo checkpoint, agrandarlo un 50% y moverlo para que la casa no
+lo tapara, primero a un lado del centro de la ventana y finalmente,
+pedido explícito, "a la esquina derecha de la casa, simétricamente al
+árbol".
+
+1. **Sustitución completa de material y forma — no un reajuste de
+   tamaño sobre la horca de metal del checkpoint 22.** El poste con
+   brazo de cilindros (`CylinderGeometry`, `COLOR_POSTE_FAROLA` hierro
+   forjado) se sustituyó por tres TABLAS PLANAS (`BoxGeometry`) de
+   madera (`COLOR_TRONCO`, el mismo tono ya usado en el tronco del
+   árbol): vertical, horizontal y una diagonal de refuerzo — las tres
+   coplanares (Z=0 en el espacio local de la pieza), formando el
+   triángulo real que se pidió, no solo una silueta que lo sugiere.
+   Tamaño fijo en metros (0.95m de poste de referencia, antes de
+   escalar), sin atarlo a la altura de la casa como hacían los diseños
+   "cobra"/"vintage" anteriores — pedido explícito de que fuera
+   pequeño, y esos diseños se habían ido hacia arriba en altura
+   precisamente por escalar con `geo.altura`.
+
+2. **Tabla diagonal: longitud y ángulo calculados a partir de los dos
+   puntos que conecta, no ajustados a ojo.** Un punto más abajo en el
+   poste y otro a mitad de la tabla horizontal definen un vector 2D en
+   el plano local; `Math.hypot`/`Math.atan2` dan la longitud y el
+   ángulo de rotación reales — así el triángulo encaja exactamente
+   aunque cambien `LONGITUD_BRAZO`/`ALTURA_POSTE` en el futuro, sin
+   tener que volver a calcular nada a mano.
+
+3. **Toda la escuadra se construye en un espacio local sencillo donde
+   "hacia la casa" es siempre el eje +X, y se rota el GRUPO ENTERO una
+   sola vez al final** (`grupo.rotation.y`) para alinear ese eje con la
+   dirección real hacia la casa — en vez de orientar cada una de las
+   tres tablas por separado con la dirección real (que costó un bug
+   real en el brazo de la horca del checkpoint 22, con una pieza que
+   apuntaba siempre igual sin importar la orientación de la casa). Con
+   una única rotación de grupo, ese tipo de bug no puede volver a
+   pasar pieza por pieza.
+
+4. **Agrandado un 50% (`ESCALA_FAROLA`), incluido el propio farolillo
+   — a diferencia del checkpoint 22, que lo dejaba del mismo tamaño que
+   el del árbol a propósito.** Pedido explícito distinto esta vez
+   ("hazlo más grande"): el farolillo ya no comparte tamaño con el del
+   árbol, aunque siga siendo la misma función `construirFarolilloColgante`.
+   Intensidad de la luz escalada con el cuadrado de `ESCALA_FAROLA`
+   (mismo criterio que los diseños anteriores: con el farolillo más
+   grande y más lejos del suelo, la iluminancia cae con el cuadrado de
+   esa distancia).
+
+5. **Posición: dos intentos fallidos antes de la posición final, cada
+   uno confirmado o descartado con captura real.**
+   - Centrada en la ventana trasera con un desplazamiento lateral "a
+     ojo" (tangente a la pared, signo elegido sin verificar primero):
+     en la primera captura quedaba prácticamente escondida detrás de la
+     esquina de la casa; al invertir el signo del desplazamiento
+     quedaba todavía MÁS escondida, no menos — confirmando que ese
+     enfoque (mover lateralmente una cantidad arbitraria) no era fiable
+     sin saber de antemano hacia qué lado "cae" la pantalla.
+   - Pedido explícito de abandonar ese enfoque y usar en su lugar la
+     esquina real de la casa "simétrica al árbol": reutiliza
+     literalmente la misma técnica que ya usa `construirArbol` para su
+     propia posición (`perp`, perpendicular a la cámara; la esquina de
+     `geo.esquinasSuelo` con la proyección más negativa sobre ese
+     mismo eje) — el lado contrario al árbol, una esquina REAL de la
+     habitación, no una posición aproximada. Confirmado a ojo por el
+     usuario en la primera captura con este cambio.

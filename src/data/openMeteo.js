@@ -7,8 +7,20 @@ const VARIABLES_MINUTELY_15 = [
   'precipitation',
   'relative_humidity_2m',
   'wind_speed_10m',
+  'wind_direction_10m',
   'cloud_cover',
+  'weather_code',
 ];
+
+// Códigos WMO (weather_code) de tormenta eléctrica — los únicos 3 códigos
+// que Open-Meteo usa para "thunderstorm" (95 leve/moderada, 96 y 99 con
+// granizo). Antes (Fase 6, checkpoint 5) la escena 3D aproximaba "hay
+// tormenta" con lluvia fuerte + mucha nube porque no se pedía este dato;
+// ahora que se pide, es el dato real el que decide, no una heurística.
+const CODIGOS_TORMENTA = new Set([95, 96, 99]);
+export function esTormenta(codigoTiempo) {
+  return CODIGOS_TORMENTA.has(codigoTiempo);
+}
 
 // Pide clima real en resolución de 15 minutos. Con past_minutely_15 por
 // defecto (0), el primer punto devuelto es el más cercano al instante

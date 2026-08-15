@@ -8,6 +8,16 @@
   </head>
   <body>
     <div id="banner-debug" hidden>MODO DEBUG</div>
+    <form id="panel-debug">
+      <label>Hora <input type="datetime-local" name="debugHora" step="60" /></label>
+      <label>Nubes % <input type="number" name="debugNubes" min="0" max="100" step="1" /></label>
+      <label>Lluvia mm <input type="number" name="debugLluvia" min="0" step="0.5" /></label>
+      <label>Viento km/h <input type="number" name="debugViento" min="0" step="1" /></label>
+      <label>Viento dir° <input type="number" name="debugVientoDir" min="0" max="360" step="1" /></label>
+      <label>Cód. tiempo <input type="number" name="debugCodigoTiempo" min="0" max="99" step="1" placeholder="95=tormenta" /></label>
+      <button type="submit">Aplicar</button>
+      <button type="button" id="panel-debug-limpiar">Limpiar</button>
+    </form>
     <div id="escena3d"></div>
     <script type="module" src="/src/ui/main-escena3d.js"></script>
   </body>

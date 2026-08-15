@@ -31,6 +31,12 @@ export async function obtenerDatosReales(lat, lon, horasHorizonte = 8) {
     precipitacion: minutely15.precipitation[0],
     humedad: minutely15.relative_humidity_2m[0],
     viento: minutely15.wind_speed_10m[0],
+    // vientoDireccion: de dónde SOPLA el viento (convención meteorológica
+    // estándar, grados de brújula) — no hacia dónde va. codigoTiempo: WMO
+    // weather_code, para detectar tormenta de verdad (ver esTormenta() en
+    // openMeteo.js) en vez de aproximarla con lluvia+nubes.
+    vientoDireccion: minutely15.wind_direction_10m[0],
+    codigoTiempo: minutely15.weather_code[0],
   };
 
   return { actual, pronostico };

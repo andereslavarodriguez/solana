@@ -292,3 +292,56 @@ button[type='button']:hover {
   padding: 0.4rem 0.6rem;
   font-size: 0.85rem;
 }
+
+/* Panel de depuración de escena3d.html (Fase 6, checkpoint 4): solo para
+   iterar a mano en el navegador, no forma parte de ninguna pantalla real de
+   la app. Fijo en la esquina para no tapar la escena. */
+#panel-debug {
+  position: fixed;
+  top: 2.6rem; /* deja hueco fijo para #banner-debug, se vea o no (más simple que medirlo) */
+  right: 0.6rem;
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  background: rgba(255, 250, 243, 0.9);
+  border: 1px solid var(--borde);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+#panel-debug label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  color: var(--texto-suave);
+}
+
+#panel-debug input {
+  width: 7rem;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.3rem;
+}
+
+#panel-debug button {
+  align-self: flex-end;
+  background: var(--acento);
+  color: #fff;
+  border: none;
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+#panel-debug button:hover {
+  background: var(--acento-oscuro);
+}
+
+#panel-debug-limpiar {
+  background: none;
+  color: var(--texto-suave);
+  border: 1px solid var(--borde);
+}

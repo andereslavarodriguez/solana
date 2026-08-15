@@ -12,6 +12,7 @@ import { posicionSolar } from '../src/data/sol.js';
 import { obtenerDatosReales } from '../src/data/adaptador.js';
 import { qSolarVentana, simularHorizonte } from '../src/model/termico.js';
 import { recomendarVentana, recomendarPersiana } from '../src/model/recomendacion.js';
+import { esTormenta } from '../src/data/openMeteo.js';
 
 // Piso de prueba (spec.md §3.4: orientaciones y geometría de edificios
 // enfrente reales; ancho de ventana y parámetros ajustables son valores de
@@ -24,6 +25,7 @@ const piso = {
   factorCapacidad: 6,
   SHGC: 0.6,
   renovacionesHora: 3,
+  bandaConfort: { min: 21, max: 25 },
   ventanas: [
     { nombre: 'A', orientacion: 248, ancho: 2.0, alturaEdificioEnfrente: 15, distanciaEdificioEnfrente: 45 },
     { nombre: 'B', orientacion: 68, ancho: 1.8, alturaEdificioEnfrente: 12, distanciaEdificioEnfrente: 20 },
@@ -52,8 +54,12 @@ async function main() {
   console.log(`  hora del dato actual = ${actual.hora}`);
   console.log(
     `  T_out = ${actual.tOut}°C, nubes = ${actual.sol.nubesPct}%, ` +
-      `precipitación = ${actual.precipitacion}mm, humedad = ${actual.humedad}%, viento = ${actual.viento}km/h`
+      `precipitación = ${actual.precipitacion}mm, humedad = ${actual.humedad}%, ` +
+      `viento = ${actual.viento}km/h desde ${actual.vientoDireccion}°, ` +
+      `weather_code = ${actual.codigoTiempo} (tormenta=${esTormenta(actual.codigoTiempo)})`
   );
+  assert.ok(actual.vientoDireccion >= 0 && actual.vientoDireccion < 360, 'vientoDireccion fuera de [0,360)');
+  assert.ok(Number.isInteger(actual.codigoTiempo), 'codigoTiempo debería ser un entero WMO');
   console.log(`  sol en el instante actual: elevación=${actual.sol.elevacion.toFixed(2)}°, azimut=${actual.sol.azimut.toFixed(2)}°`);
   console.log(`  pasos de pronóstico recibidos = ${pronostico.length} (esperado 32, 8h a 15min)`);
   assert.equal(pronostico.length, 32);
