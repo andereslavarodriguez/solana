@@ -1,7 +1,7 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-15 (Fase 6, checkpoints 1-23, confirmados
-a ojo por el usuario y commiteados)
+Última actualización: 2026-08-15 (Fase 6 completa — checkpoint 24, la
+escena 3D integrada en `index.html` junto al dashboard, cierra la fase)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -67,11 +67,16 @@ tenga sus tests/verificación pasando y esté commiteada.
   espera a `[data-cargado="true"]` en vez de un timeout fijo — comprobado
   a ojo en los estados sin anotación, con anotación, con toggles, con
   validación de rango y con fallo de red simulado.
-- **Fase 6 (checkpoints 1-8) — Escena 3D, en progreso.** `src/escena3d/`
+- **Fase 6 — Escena 3D, completa.** `src/escena3d/`
   (`geometria.js`, `iluminacion.js`, `escena.js`) con Three.js
   (`0.185.1`, pinneada exacta como `playwright`), montada de forma
-  aislada en `escena3d.html`/`src/ui/main-escena3d.js` (no en el
-  dashboard todavía — eso es integración pendiente). Habitación como
+  aislada en `escena3d.html`/`src/ui/main-escena3d.js` para iterar
+  visualmente (checkpoints 1-23, resumen detallado en "Fase actual" y
+  "Decisiones tomadas" de cada checkpoint), e integrada al final
+  (checkpoint 24) en `index.html` junto al dashboard vía
+  `src/ui/escena3dDashboard.js`, con datos reales (no el override de
+  depuración, que sigue existiendo solo en la página aislada). Habitación
+  como
   caja rectangular con las dos ventanas de cristal completo (suelo a
   techo) en paredes opuestas, marco en cruz + perimetral por ventana con
   sombra 3D real (`castShadow`/`receiveShadow`, sol real vía
@@ -234,10 +239,18 @@ finalmente a la esquina real de la casa simétrica al árbol (misma
 técnica de "esquina más opuesta según `perp`" que ya usa el propio
 árbol para su posición). **Confirmado a ojo por el usuario.**
 Implementado y verificado a fondo con capturas reales en cada paso, ver
-"Decisiones tomadas" para el detalle completo. Integrar la escena en
-`index.html` junto al dashboard queda como próximo paso (de momento
-vive aislada en `escena3d.html` para iterar sin mezclar con el
-checkpoint de integración de Fase 5).
+"Decisiones tomadas" para el detalle completo; y checkpoint 24 (cierra
+la Fase 6): la escena 3D se integró en `index.html`, como un banner a
+ancho completo por encima del dashboard (Fase 5) — módulo nuevo
+`src/ui/escena3dDashboard.js`, contenedor `#escena3d-hero` HERMANO de
+`#app` (nunca dentro, para que el re-render de `dashboard.js` no pueda
+destruir el canvas WebGL — la duda que había quedado pendiente desde el
+checkpoint 1-3). Usa datos reales de clima/sol/luna (no el override de
+depuración, que sigue existiendo solo en `escena3d.html`), con
+`escena3d.html` dejado intacto como página de iteración aislada. De
+paso se encontró y corrigió un bug real preexistente en
+`main-escena3d.js` (no introducido por esta integración, pero
+descubierto al verificarla) — ver "Decisiones tomadas".
 
 ## Fases
 
@@ -257,7 +270,7 @@ checkpoint de integración de Fase 5).
 - [x] **Fase 5 — Dashboard.** Pantalla principal: clima en vivo, recomendación
       independiente por ventana (ventana + persiana), botón de anotar
       temperatura (spec.md §6.2).
-- [ ] **Fase 6 — Escena 3D.** Vista fija estilo Los Sims, geometría limpia,
+- [x] **Fase 6 — Escena 3D.** Vista fija estilo Los Sims, geometría limpia,
       sol/sombra/nubes/lluvia en vivo (spec.md §6.1). Probablemente varias
       sesiones — no forzar que quepa en una.
 - [ ] **Fase 7 — Histórico.** Predicho vs. real, recalibración con las
@@ -2356,3 +2369,107 @@ pedido explícito, "a la esquina derecha de la casa, simétricamente al
      mismo eje) — el lado contrario al árbol, una esquina REAL de la
      habitación, no una posición aproximada. Confirmado a ojo por el
      usuario en la primera captura con este cambio.
+
+### Fase 6 — Escena 3D (checkpoint 24: integración en index.html junto al dashboard, cierra la Fase 6)
+
+Pedido explícito: "falta integrar la escena 3D en index.html junto al
+dashboard (ahora mismo vive aislada en escena3d.html) — eso cierra del
+todo la Fase 6".
+
+1. **Contenedor `#escena3d-hero`, HERMANO de `#app` en el DOM, nunca
+   dentro — resuelve la duda que quedó pendiente desde el checkpoint
+   1-3 (decisión 13: "dashboard.js reescribe innerHTML de su propio
+   contenedor en cada render... hay que decidir cómo mantener la escena
+   3D fuera del ciclo de re-render del dashboard antes de
+   integrarla").** Con la escena en un elemento sibling (banner a ancho
+   completo por encima de `#app`, no dentro), cada `render()` de
+   `dashboard.js` (toggles, nueva anotación, refresco de clima cada 15
+   min) reconstruye solo su propio `innerHTML` — el canvas WebGL de la
+   escena nunca se toca. `main.js` monta ambos por separado, cada uno
+   con su propio `storage`.
+
+2. **`src/ui/escena3dDashboard.js`, módulo nuevo — reutiliza
+   `obtenerDatosReales` tal cual, sin repetir el cálculo de posición
+   solar que sí hace falta en `main-escena3d.js`.** A diferencia de la
+   página de depuración aislada (que nunca hace fetch real, por diseño,
+   y calcula `sol` a mano con `posicionSolar` porque solo tiene overrides
+   de query string), aquí `obtenerDatosReales(lat, lon)` ya devuelve
+   `actual.sol` con la forma exacta que espera `crearEscena3D`
+   (`{elevacion, azimut, nubesPct}`, calculado con el mismo
+   `posicionSolar` internamente) — no hay que llamarlo por separado.
+   `clima.viento` se arma con `actual.viento`/`actual.vientoDireccion`
+   (velocidad/dirección reales de Open-Meteo). Fallback si el fetch
+   falla (sin red, por ejemplo): se construye igual la escena, con
+   `posicionSolar` calculado directamente (no depende de red) y
+   condiciones neutras (`nubesPct:0`, `precipitacion:0`, `viento:null`)
+   — mismo criterio que el default de `estadoVentanas.js` (Fase 5):
+   mejor un estado neutro sin datos que una escena rota o ausente.
+
+3. **Bug real encontrado verificando la integración: race condition
+   entre el fetch de la escena (asíncrono) y la captura/carga de
+   página, sin ninguna señal de "lista".** Una primera verificación con
+   Playwright en viewport de escritorio capturó la página con el hero
+   completamente en blanco — el propio dashboard ya se había marcado
+   `[data-cargado="true"]` (su fetch de clima, independiente, había
+   resuelto antes) mientras el fetch de la escena todavía estaba en
+   vuelo. En un viewport de móvil la misma carga sí había mostrado la
+   escena completa, confirmando que era una carrera de temporización
+   (ambos fetches piden datos al mismo host con latencia parecida, así
+   que unas veces coincide y otras no) y no un problema de tamaño de
+   contenedor. Arreglado con el mismo patrón que ya usan
+   `dashboard.js`/`main-escena3d.js`: `contenedor.dataset.cargado =
+   'true'` en `escena3dDashboard.js` tras llamar a `crearEscena3D`,
+   para que cualquier código (verificación o futuro) tenga una señal
+   fiable. Además, `#escena3d-hero` lleva un fondo de degradado cielo
+   (mismo tono que el cielo despejado de día de la propia escena) en
+   vez de heredar el fondo crema del body — evita un parpadeo en blanco
+   real para el usuario mientras el fetch está en curso, no solo un
+   arreglo de test.
+
+4. **Altura del banner: `55vh` con `min-height: 360px`, no pantalla
+   completa como `escena3d.html` (que usa `100vh`) — por eso un id
+   distinto (`#escena3d-hero`) en vez de reutilizar `#escena3d`.**
+   Ambas páginas comparten la misma hoja de estilos; con el mismo id se
+   habría heredado sin querer la regla `100vh` pensada para la página
+   aislada de pantalla completa. La cámara de la escena ya generaliza
+   sola a esta proporción distinta (el aspecto real del contenedor, no
+   un valor fijo, decide si usa la composición landscape o la
+   portrait/"casa abajo, cielo arriba" ya calibrada en checkpoints
+   anteriores) — no hizo falta tocar `construirCamara`. Verificado con
+   captura real en escritorio (1280×800, aspecto ≈2.3, landscape) y
+   móvil (393×852, con el hero en aspecto ≈0.77 — menos extremo que el
+   ≈0.46 de la página aislada a pantalla completa, pero sigue disparando
+   la rama portrait sin verse deformado).
+
+5. **Bug real preexistente encontrado (no introducido por esta
+   integración) al diagnosticar por qué `escena3d.html` sin ningún
+   query param mostraba `THREE.BufferGeometry.computeBoundingSphere():
+   Computed radius is NaN` en consola — diagnosticado con
+   instrumentación temporal (`scene.traverse` + comparación de stack
+   trace vía `console.error` parcheado, revertida antes de commitear),
+   no a ciegas.** Causa: en `main-escena3d.js`,
+   `override.viento !== null` — cuando no hay NINGÚN override activo,
+   `leerOverrideDebug()` devuelve `{activo:false}` y deja el resto de
+   campos, incluido `viento`, en `undefined` (no `null`). `undefined
+   !== null` es `true`, así que el chequeo se colaba igual que un valor
+   real, construyendo `clima.viento = {velocidad: undefined, direccion:
+   0}` en vez de `null`. `construirViento` (escena.js) no trataba ese
+   caso como "sin viento" — su guarda comprueba `viento.velocidad <=
+   0`, y `undefined <= 0` es `false`, no `true` — así que construía las
+   hojas del viento (`NUM_HOJAS = 7`, constante fija, coincide
+   exactamente con el `count: 7` del error) con posiciones NaN en X/Z
+   (dependen de `velocidad`; la Y no, por eso solo dos de las tres
+   coordenadas salían mal). Arreglado cambiando la comparación a
+   `override.viento != null` (comparación laxa: trata `undefined` y
+   `null` igual, correcto aquí porque ambos significan "sin dato de
+   viento"). Verificado sin errores de consola en 3 cargas seguidas de
+   `escena3d.html` sin overrides y una carga con `?debugViento=25
+   &debugVientoDir=90` (para confirmar que el override real de viento
+   sigue funcionando).
+
+6. **`escena3d.html` se deja intacta como página de iteración
+   aislada — no se elimina ni se redirige.** Sigue siendo útil para
+   iterar visualmente con el override de depuración (hora/nubes/
+   lluvia/viento/tormenta forzados) sin depender de que el clima real
+   coincida con lo que se quiere probar, tal y como se decidió crearla
+   en el checkpoint 1-3.

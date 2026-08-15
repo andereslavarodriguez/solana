@@ -41,6 +41,26 @@ body {
   display: block;
 }
 
+/* Escena 3D integrada en el dashboard (Fase 6, checkpoint 24): banner
+   superior a ancho completo, NO a pantalla completa como en escena3d.html
+   (id distinto a propósito — misma hoja de estilos, pero un contenedor
+   nuevo con su propia altura para que el dashboard pueda desplazarse por
+   debajo). Elemento central de la interfaz (spec.md §6.1), así que ocupa
+   una porción notable de la pantalla sin llegar a taparla entera. */
+#escena3d-hero {
+  width: 100%;
+  height: 55vh;
+  min-height: 360px;
+  /* Fondo cielo mientras el fetch de clima de la escena (asíncrono,
+     independiente del clima del dashboard) todavía no ha resuelto — evita
+     un parpadeo en blanco antes de que aparezca el canvas real. */
+  background: linear-gradient(#8fe0fb, #bde4f7);
+}
+
+#escena3d-hero canvas {
+  display: block;
+}
+
 #banner-debug {
   position: fixed;
   top: 0;

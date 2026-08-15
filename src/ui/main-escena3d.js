@@ -34,8 +34,16 @@ const sol = {
 const clima = {
   precipitacion: override.precipitacion ?? 0,
   codigoTiempo: override.codigoTiempo,
+  // `!= null` (no `!== null`): sin ningún override activo, `override.viento`
+  // es `undefined` (no `null`) — con `!== null` a secas, `undefined` pasaba
+  // el chequeo igual que un número real, construyendo `{velocidad:
+  // undefined, ...}` en vez de `null`. Bug real encontrado al integrar la
+  // escena en el dashboard (ver docs/estado.md): `construirViento` no
+  // trata `velocidad: undefined` como "sin viento" (su guarda comprueba
+  // `viento.velocidad <= 0`, y `undefined <= 0` es `false`, no `true`), así
+  // que construía partículas de polvo/hojas con posiciones NaN.
   viento:
-    override.viento !== null
+    override.viento != null
       ? { velocidad: override.viento, direccion: override.vientoDireccion ?? 0 }
       : null,
 };
