@@ -194,6 +194,29 @@ caso('noche, sin sol, fuera bastante más caliente que dentro -> recomienda cerr
   assert.equal(r.accion, 'cerrar');
 });
 
+// Caso real reportado por el usuario ("me está diciendo cosas absurdas"): de
+// noche, con T_out ya más fresco que T_in, la app recomendaba CERRAR — bug
+// real en el peso de la simulación (ver `distanciaPonderada` en
+// recomendacion.js). El pronóstico de madrugada sigue bajando varios grados
+// más en las siguientes horas (habitual), lo cual con peso constante hacía
+// que la trayectoria "abierta" (se enfría antes) acumulara más distancia
+// fuera de banda que "cerrada" a largo plazo, pese a ser claramente mejor
+// ahora mismo y en la próxima hora.
+caso('noche, T_in muy por encima de la banda, T_out más fresco pero el pronóstico sigue bajando -> abrir', () => {
+  const sol = { elevacion: -30, azimut: 180, nubesPct: 50 };
+  const pronostico = Array.from({ length: 32 }, (_, i) => ({
+    tOut: 22 - (6 * i) / 31, // baja de 22°C a 16°C a lo largo de 8h, típico de madrugada
+    sol,
+  }));
+  const estados = {
+    A: { abierta: false, persianaArriba: false },
+    B: { abierta: false, persianaArriba: false },
+  };
+  const r = recomendarVentana('A', 26, pronostico, estados, piso);
+  console.log(`    accion = ${r.accion}`);
+  assert.equal(r.accion, 'abrir');
+});
+
 console.log('\n--- recomendarPersiana (§5, regla acordada) ---');
 
 caso('T_in ya por encima de 25°C ahora mismo -> bajar, sin mirar T_out', () => {
@@ -228,6 +251,24 @@ caso('sin sol (de noche) y fuera frío -> persiana arriba no supera el límite -
     B: { abierta: false, persianaArriba: false },
   };
   const r = recomendarPersiana('A', 22, pronostico, estados, piso);
+  console.log(`    accion = ${r.accion} (${r.motivo})`);
+  assert.equal(r.accion, 'arriba');
+});
+
+// Caso real reportado por el usuario, junto con el de recomendarVentana de
+// arriba: de noche, con T_in por encima de la banda de confort pero SIN
+// NADA de sol en todo el horizonte, la app recomendaba "bajar persiana" —
+// una recomendación sin sentido porque de noche la persiana no afecta en
+// nada a la temperatura (Q_solar es 0 esté como esté). El atajo "T_in ya
+// supera el máximo -> bajar" no miraba si había sol de por medio.
+caso('T_in por encima de la banda pero sin sol en todo el horizonte -> indiferente, arriba', () => {
+  const sol = { elevacion: -30, azimut: 248, nubesPct: 50 }; // de noche, Q_solar siempre 0
+  const pronostico = Array.from({ length: 32 }, () => ({ tOut: 22, sol }));
+  const estados = {
+    A: { abierta: false, persianaArriba: false },
+    B: { abierta: false, persianaArriba: false },
+  };
+  const r = recomendarPersiana('A', 26, pronostico, estados, piso);
   console.log(`    accion = ${r.accion} (${r.motivo})`);
   assert.equal(r.accion, 'arriba');
 });

@@ -1,7 +1,8 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-16 (Fase 8 completa — PWA instalable
-desplegada en GitHub Pages, cierra la última fase de la spec)
+Última actualización: 2026-08-16 (corrección de dos bugs reales en el motor
+de recomendación — ventana/persiana daban avisos absurdos de noche, ver
+"Correcciones post-lanzamiento" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -11,7 +12,7 @@ tenga sus tests/verificación pasando y esté commiteada.
 
 - **Fase 1 — Modelo puro.** Modelo térmico RC, sombra por ventana y motor de
   recomendación implementados como funciones puras en `src/model/` (sin APIs
-  reales, sin persistencia, sin interfaz). 26 casos de prueba manuales en
+  reales, sin persistencia, sin interfaz). 28 casos de prueba manuales en
   `test/model.test.js`, verificables a ojo (imprimen valores intermedios) y
   con `assert`. Ejecutar con `npm test`.
 - **Fase 2 — Datos reales.** Capa de datos en `src/data/` (`ubicacion.js`,
@@ -196,6 +197,11 @@ posibles mejoras de iluminación de la escena 3D propuestas y no
 implementadas en el checkpoint 18) quedan para cuando el propio uso
 diario del piso real dé motivo para revisarlos — no hay una "Fase 9"
 planificada en la spec.
+
+El uso diario real ya dio motivo para una revisión: dos bugs reales en el
+motor de recomendación (`src/model/recomendacion.js`) que daban avisos
+absurdos de noche, corregidos el 2026-08-16 — ver "Correcciones
+post-lanzamiento" al final de este documento.
 
 ## Fases
 
@@ -2777,3 +2783,77 @@ ambos) — resueltas como se detalla en las decisiones siguientes.
     (`captura-pantalla.mjs` para dashboard/parámetros,
     `captura-historico.mjs`) y contra el sitio ya desplegado en
     producción, no solo en local.
+
+### Correcciones post-lanzamiento: motor de recomendación (2026-08-16)
+
+El usuario reportó recomendaciones "absurdas" con un caso concreto: de
+noche, con 22°C fuera y 26°C dentro, la app recomendaba cerrar la ventana Y
+bajar la persiana — justo lo contrario de lo razonable (fuera está más
+fresco que dentro, y de noche el sol no puede ser el problema). Diagnóstico
+con simulaciones manuales (no solo lectura de código) antes de tocar nada,
+reproduciendo primero el caso con los parámetros por defecto del piso: con
+un pronóstico plano (22°C toda la noche) el motor SÍ recomendaba bien
+("abrir") — hizo falta reproducirlo con un pronóstico de madrugada bajando
+varios grados más en las siguientes horas (habitual: 22°C→16°C en 8h) para
+que apareciera el primer bug. Dos bugs reales distintos, uno por ventana y
+otro por persiana:
+
+1. **`recomendarVentana`: la comparación de trayectorias completas (§5,
+   decisión 7 de la Fase 1) pesaba por igual todo el horizonte de 6-8h, sin
+   ninguna preferencia por el corto plazo.** Con un pronóstico que sigue
+   bajando de madrugada, la trayectoria "ventana abierta" se enfría más
+   rápido y por tanto se pasa por debajo de la banda de confort ANTES que
+   la trayectoria "cerrada" — esa infracción futura, sumada a peso
+   constante junto con el resto de pasos, pesaba más en la suma total que
+   el beneficio real e inmediato de abrir ahora mismo (T_in muy por encima
+   de la banda, T_out ya dentro de ella). Verificado que ni siquiera
+   acortar el horizonte de golpe a un número fijo de pasos es una solución
+   robusta (el resultado cambia de forma brusca según dónde se corte,
+   comprobado a mano con varios cortes). Arreglado ponderando cada paso del
+   horizonte con un peso que decae exponencialmente
+   (`distanciaPonderada` en `recomendacion.js`, `VIDA_MEDIA_PASOS_VENTANA =
+   3` — 45 min con pasos de 15min): lo que pase dentro de un rato (que la
+   propia app puede corregir sola en el siguiente refresco automático de
+   clima, cada 15min — Fase 5) pesa mucho más que lo que pase dentro de
+   4-8h, sin dejar de anticipar del todo (spec.md §5 pide literalmente
+   "abrir ahora O EN LAS PRÓXIMAS HORAS", no "en las próximas 8h por
+   igual"). El valor 3 se eligió a ojo, verificado contra varios
+   escenarios sintéticos (pronóstico plano, bajando fuerte, bajando
+   moderado, con y sin T_in ya fuera de banda) antes de fijarlo — mismo
+   criterio que otros parámetros del proyecto sin base empírica todavía
+   (umbrales 3h/12h de antigüedad de anotación, `MINIMO_FILAS_RECALIBRACION`),
+   **pendiente de ajustar con uso real**.
+
+2. **`recomendarPersiana`: el atajo "T_in ya supera el máximo de confort
+   ahora mismo -> bajar, sin mirar T_out" (§5, decisión 5 de la Fase 1) no
+   comprobaba si había algo de sol de por medio.** De noche, sin ningún sol
+   en todo el horizonte, `Q_solar` es 0 tanto con la persiana arriba como
+   abajo — la posición de la persiana es literalmente indiferente
+   térmicamente (esto ya lo dice spec.md §5 explícitamente para el caso
+   "sin sol"), pero el atajo se disparaba igual solo por mirar T_in,
+   recomendando "bajar" una persiana que no tiene ningún efecto real en
+   ese momento. Quitar el atajo sin más no bastaba: incluso simulando la
+   trayectoria con la persiana arriba y comprobando si supera el máximo en
+   algún punto (la rama normal del algoritmo), el primer elemento de esa
+   trayectoria es la propia `tInActual` ya por encima del máximo, así que
+   `trayectoria.some(t => t > banda.max)` seguía dando `true` por el mismo
+   motivo. Arreglado comparando de verdad las dos trayectorias completas
+   (persiana arriba vs. abajo, mismo resto de estados): si son
+   EXACTAMENTE iguales en todos los pasos, el sol no está en juego en todo
+   el horizonte y se recomienda `'arriba'` sin más — mismo valor por
+   defecto que ya usaba el resto del algoritmo para "no hace falta
+   bajarla" (no "dejarla como está": se probó esa alternativa primero y
+   rompía un test ya existente de la Fase 1 que esperaba `'arriba'` como
+   default explícito para el caso sin sol, así que se mantuvo la
+   convención ya establecida en vez de introducir una nueva).
+
+3. **Verificación:** dos casos de prueba manuales nuevos en
+   `test/model.test.js` que reproducen EXACTAMENTE el escenario reportado
+   por el usuario (T_in=26°C, T_out empezando en 22°C y bajando a lo largo
+   de 8h; y T_in=26°C sin nada de sol en el horizonte), además de los 4
+   casos ya existentes de `recomendarVentana`/`recomendarPersiana`, todos
+   pasando (`npm test`, 32 casos OK en total del fichero, sin tocar
+   ningún otro módulo). El resto del modelo térmico (`termico.js`,
+   `sombra.js`, `irradiancia.js`) no cambió — el problema estaba
+   íntegramente en cómo `recomendacion.js` interpretaba las trayectorias
+   simuladas, no en la física del modelo en sí.
