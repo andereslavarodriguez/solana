@@ -2744,3 +2744,36 @@ ambos) — resueltas como se detalla en las decisiones siguientes.
     separado) y, cuando sea posible, verificar contra el sitio ya
     desplegado además de contra `vite preview` local — ambos escapan
     bugs que dependen del subpath real de despliegue.
+
+12. **Rediseño de estilo tras la primera instalación real en móvil —
+    pedido explícito: "evita usar la tipografía, colores y estilo de
+    Claude. haz que sea minimalista".** La paleta original
+    (terracota `#c97b4a` + crema `#faf3ea`) coincide de forma bastante
+    directa con los colores de marca de Claude/Anthropic — aunque
+    cumplía "cálido y hogareño" al pie de la letra (spec.md §6), leía
+    como una plantilla genérica de IA en vez de tener identidad propia.
+    Sustituida por oliva apagado (`--acento: #55654a`) + carbón cálido
+    (`--texto: #262420`) + lino (`--fondo: #f3f1ea`) — sigue siendo
+    cálido/hogareño (madera, plantas, luz de casa) pero deliberadamente
+    fuera de la familia terracota. Titulares (`h1`/`h2`/`legend`/
+    `.datos-clima dd`) en una pila de fuentes serif del sistema
+    (`Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua',
+    serif`) para un contraste clásico con el cuerpo en sans — sin cargar
+    ninguna fuente externa (coherente con "sin servidor propio", CLAUDE.md).
+    Esquinas de `border-radius` bajadas de 0.5-0.75rem a 0.15-0.2rem
+    (casi rectas) y botones rectangulares, criterio "minimalista" pedido
+    explícitamente — menos "redondeado y bonito", que es justo el rasgo
+    que más se asocia con una interfaz generada por IA sin dirección de
+    diseño propia. `.seccion-calibrable` (Fase 4, decisión 4: distinguir
+    visualmente parámetros fijos de calibrables) pasa de un bloque de
+    fondo de color propio a un borde izquierdo fino con el acento — la
+    distinción funcional se mantiene, pero con mucho menos relleno de
+    color, más en línea con "minimalista". Iconos de la PWA (Fase 8,
+    decisión 7) y `theme-color`/`background_color` del manifest
+    regenerados a juego con la paleta nueva — un fallback hardcodeado en
+    `historico.js` (colores de Chart.js) también actualizado, aunque en
+    la práctica siempre lee primero de las variables CSS reales.
+    Verificado visualmente con los scripts de captura ya existentes
+    (`captura-pantalla.mjs` para dashboard/parámetros,
+    `captura-historico.mjs`) y contra el sitio ya desplegado en
+    producción, no solo en local.
