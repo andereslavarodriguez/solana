@@ -1,7 +1,7 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-16 (Fase 7 completa — histórico con
-predicho vs. real y recalibración automática, cierra la fase)
+Última actualización: 2026-08-16 (Fase 8 completa — PWA instalable
+desplegada en GitHub Pages, cierra la última fase de la spec)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -150,25 +150,52 @@ tenga sus tests/verificación pasando y esté commiteada.
   real (primera anotación con `predicho: null`, segunda con `predicho`
   calculado de verdad). Un bug real encontrado y corregido por el camino
   — ver "Decisiones tomadas".
+- **Fase 8 — PWA, completa. Cierra la spec entera.** `vite-plugin-pwa`
+  (`generateSW`) genera `manifest.webmanifest` + service worker que
+  precachea el app shell completo (las 4 páginas — dashboard, parámetros,
+  histórico, escena3d — y todo su JS/CSS/iconos) para conexión
+  intermitente (spec.md §7); regla `runtimeCaching` explícita con
+  `NetworkOnly` para `api.open-meteo.com` — el clima nunca se sirve de
+  caché, solo de red real, coherente con "los datos de clima requieren
+  red" de la spec. `skipWaiting`+`clientsClaim` para que la primera visita
+  ya quede controlada offline sin que el usuario tenga que recargar.
+  Registro del service worker manual (`src/ui/registrarServiceWorker.js`,
+  `virtual:pwa-register`) importado por los 3 puntos de entrada reales
+  (`main.js`, `main-parametros.js`, `main-historico.js`) en vez de la
+  inyección automática del plugin — más explícito y verificable en un
+  sitio multi-página; `escena3d.html` (página de depuración aislada, no
+  parte de la app instalable) no lo registra. Iconos propios nuevos
+  (`public/icons/`, SVG generado con la paleta cálida ya existente en
+  `estilo.css` — casa con dos ventanas y sol sobre fondo `--acento`,
+  ninguna dependencia de diseño externa) en 192/512/apple-touch-icon/
+  maskable. Repo real creado (`github.com/andereslavarodriguez/solana`,
+  público) y desplegado a GitHub Pages
+  (`https://andereslavarodriguez.github.io/solana/`) vía
+  `.github/workflows/deploy.yml` (`npm test` → `npm run build` → GitHub
+  Pages), con GitHub Pages configurado con origen "GitHub Actions".
+  Verificado con Playwright contra un build real (`vite preview`): las 4
+  páginas cargan con `context.setOffline(true)` (red cortada de verdad,
+  no solo caché de navegador) y el fetch a Open-Meteo falla como se
+  pretende en vez de servirse de una respuesta cacheada; capturada
+  también la app ya desplegada en producción funcionando con datos reales
+  (clima, sol, fase lunar). Detalle completo de decisiones (elección de
+  `injectRegister: false`, `navigateFallback: null` por ser multi-página
+  y no SPA, nombre/visibilidad del repo, instalación de `gh` CLI) en
+  "Decisiones tomadas" más abajo.
 
 ## Fase actual
 
-Fase 7 — Histórico, completa (resumen detallado en "Hecho" y en
-"Decisiones tomadas" más abajo). El hueco real que resolvió la fase: no
-había ningún histórico de clima ni de estado de ventanas del que
-reconstruir predicciones pasadas, así que se diseñó un "gemelo en vivo"
-(`src/model/gemelo.js`) que simula `T_in` sin parar mientras la app está
-abierta y se corrige con cada anotación real — exactamente el patrón de
-gemelo digital de spec.md §1 (predice, se compara, se corrige), en vez de
-depender de una API de clima histórico nueva. Recalibración automática de
-`UA`/`factorCapacidad` por regresión lineal tras cada anotación no
-etiquetada, con guardas de seguridad para no sobrescribir con un ajuste
-sin sentido físico. Pantalla nueva `historico.html` con Chart.js (primera
-dependencia de UI del proyecto). Todo verificado con tests puros más una
-comprobación funcional de extremo a extremo contra el dashboard real.
-
-Siguiente: Fase 8 — PWA (manifest, service worker, instalable en
-Android), la última fase de la spec.
+Las 8 fases de spec.md están completas — no queda ninguna fase
+pendiente. La app está desplegada y funcionando en
+`https://andereslavarodriguez.github.io/solana/`, instalable desde
+Android/Chrome vía "Añadir a pantalla de inicio". Trabajo futuro (fuera
+de alcance de v1, spec.md §8) o pendientes ya anotados a lo largo de
+este documento (p.ej. revisar umbrales 3h/12h y `MINIMO_FILAS_RECALIBRACION`
+con uso real, considerar integrar `weathercode` donde todavía falta,
+posibles mejoras de iluminación de la escena 3D propuestas y no
+implementadas en el checkpoint 18) quedan para cuando el propio uso
+diario del piso real dé motivo para revisarlos — no hay una "Fase 9"
+planificada en la spec.
 
 ## Fases
 
@@ -193,7 +220,7 @@ Android), la última fase de la spec.
       sesiones — no forzar que quepa en una.
 - [x] **Fase 7 — Histórico.** Predicho vs. real, recalibración con las
       últimas ~30 anotaciones no etiquetadas (spec.md §4.2, §6.4).
-- [ ] **Fase 8 — PWA.** Manifest, service worker, instalable en Android
+- [x] **Fase 8 — PWA.** Manifest, service worker, instalable en Android
       (spec.md §7).
 
 ## Decisiones tomadas durante la construcción
@@ -2545,3 +2572,137 @@ ambos) — resueltas como se detalla en las decisiones siguientes.
     la primera anotación queda con `predicho: null` y una segunda
     anotación posterior sí lleva un `predicho` calculado de verdad, sin
     errores de consola.
+
+### Fase 8 — PWA (cierra la spec entera)
+
+1. **Repo real creado durante esta fase, con el usuario resolviendo tres
+   decisiones antes de escribir código: quién genera los iconos, cómo se
+   llama/qué visibilidad tiene el repo, y si esta fase también despliega
+   de verdad o solo deja la PWA lista.** El proyecto no había tenido
+   remote de git hasta ahora (`vite.config.js` ya dejaba `base: '/solana/'`
+   como una apuesta razonada desde la Fase 4, sin repo real que la
+   confirmara). Elegido: iconos generados por Claude (sin assets
+   externos), repo `solana` público bajo la cuenta del usuario
+   (`andereslavarodriguez`), y despliegue real a GitHub Pages (no solo
+   dejar la PWA "lista para desplegar"). Sin `gh` CLI ni ninguna sesión
+   de GitHub autenticada en el entorno — se instaló `gh` vía `apt`
+   (necesitó sudo del usuario, ejecutado por él con `!`) y se autenticó
+   con `gh auth login` interactivo (también ejecutado por el usuario, sin
+   que Claude viera ninguna credencial). Rama local renombrada de
+   `master` a `main` antes del primer push (sin remote todavía, cambio
+   sin riesgo) para coincidir con el default de GitHub — no había ninguna
+   decisión previa registrada sobre el nombre de la rama principal.
+
+2. **`vite-plugin-pwa` con estrategia `generateSW`, no `injectManifest`.**
+   Confirma la apuesta ya anotada en la Fase 4 (decisión 1: "vite-plugin-pwa
+   en la Fase 8 sin escribir el service worker a mano"). `generateSW` es
+   la opción estándar cuando no hace falta lógica de caché custom más
+   allá de reglas declarativas de Workbox — que es exactamente lo que
+   pide spec.md §7 (precachear todo, dejar el clima siempre en red real).
+
+3. **`injectRegister: false` + registro manual del service worker desde un
+   módulo compartido (`src/ui/registrarServiceWorker.js`, `virtual:pwa-register`)
+   importado en los 3 puntos de entrada reales — no la inyección
+   automática del plugin.** El sitio es multi-página desde la Fase 5 (4
+   entradas en `rollupOptions.input`, no una SPA); aunque Vite sí llama
+   al hook `transformIndexHtml` del plugin para las 4 páginas por igual
+   (confirmado inspeccionando `dist/*.html` tras el build — las 4 llevan
+   `<link rel="manifest">` con el `base` correcto), preferir un import
+   explícito en JS es más fácil de verificar y de razonar sobre qué
+   páginas registran el service worker de cuáles no, en vez de depender
+   de un comportamiento implícito del plugin para un caso (MPA) menos
+   común que su caso de uso principal (SPA). `escena3d.html` (página de
+   depuración aislada, ver Fase 6 checkpoint 1-3 decisión 13) deliberadamente
+   no importa este módulo — no es parte de la experiencia "instalable"
+   real de la app, aunque sigue precacheada igualmente como parte del
+   `dist/` completo (no hace daño, simplemente no se registra desde ahí).
+
+4. **`skipWaiting: true` + `clientsClaim: true` en `workbox`, añadidos
+   tras un bug real encontrado verificando con Playwright — no estaban
+   en el primer intento.** Con `registerType: 'autoUpdate'` a secas, el
+   service worker se instala y activa pero nunca toma control de una
+   pestaña ya abierta hasta que el usuario cierra y reabre — confirmado
+   con un test real (`navigator.serviceWorker.controller` se quedaba en
+   `null` más de 30s tras cargar la página). `registerType: 'autoUpdate'`
+   solo controla el comportamiento del *cliente* (recargar solo cuando
+   hay versión nueva sin preguntar); `skipWaiting`/`clientsClaim` son
+   opciones de Workbox aparte que hacen que el *service worker* no espere
+   a que se cierren las pestañas para activarse y reclame el control de
+   las ya abiertas de inmediato — con ambos, la primera visita ya queda
+   controlada y funciona offline sin ninguna acción del usuario,
+   verificado recargando las 4 páginas con `context.setOffline(true)`
+   (red cortada de verdad en Playwright, no solo caché del navegador)
+   tras el cambio.
+
+5. **`navigateFallback: null` explícito.** Por defecto Workbox en modo
+   `generateSW` puede configurar un fallback de navegación tipo SPA
+   (cualquier ruta no encontrada cae en una página fija) — no tiene
+   sentido aquí: las 4 páginas son URLs reales y distintas, cada una
+   precacheada con su propia entrada exacta (`directoryIndex: 'index.html'`
+   por defecto de Workbox ya resuelve `/solana/` sin filename al
+   `index.html` precacheado, sin necesitar fallback). Confirmado que
+   funciona navegando a las 4 rutas offline sin él.
+
+6. **`runtimeCaching` con `NetworkOnly` explícito para
+   `api.open-meteo.com`, no dejarlo fuera del `globPatterns` sin más.**
+   Bastaría con que el dominio de Open-Meteo no coincidiera con ningún
+   patrón de precacheo para que Workbox nunca lo intente cachear por
+   iniciativa propia, pero dejar la exclusión implícita no es lo mismo
+   que garantizar que un fetch a esa URL SIEMPRE golpea la red real y
+   nunca una respuesta de caché de ningún tipo (runtime caching por
+   defecto de `fetch()` sin ningún `registerRoute` que lo intercepte ya
+   se comporta así en un Service Worker sin más, pero declararlo
+   explícito documenta la intención — spec.md §7, "los datos de clima
+   requieren red" — en vez de depender de que nadie añada sin querer una
+   regla de caché genérica en el futuro). Verificado con Playwright:
+   offline, el `fetch()` a Open-Meteo falla (`Failed to fetch`) en vez de
+   devolver una respuesta 200 de caché.
+
+7. **Iconos: un único SVG generado sirve tanto para los iconos "any" como
+   para el "maskable", en vez de dos diseños separados.** Diseño simple
+   (casa con dos ventanas — una por cada ventana real que modela la app —
+   y sol, sobre fondo `--acento`) construido directamente con las
+   variables de color ya definidas en `estilo.css`, sin ninguna
+   herramienta de diseño externa. Verificado a mano que el contenido cae
+   dentro de la "safe zone" maskable estándar (círculo inscrito al 80%
+   del icono) antes de reutilizar el mismo PNG para ambos propósitos en
+   el manifest — evita mantener dos artes separados sin necesidad.
+   Rasterizado de SVG a PNG (192/512/apple-touch-icon 180) con
+   `imagemagick` (`convert`, ya disponible en el sistema vía `apt`), sin
+   añadir ninguna dependencia npm nueva solo para generar iconos.
+
+8. **`npm install -D vite-plugin-pwa` colgado en segundo plano la primera
+   vez (más de 8 minutos sin progreso real de E/S, confirmado con
+   `/proc/<pid>/io`) — diagnosticado antes de matarlo a ciegas, no
+   asumido como "npm es lento y ya está".** Se comprobó primero que la
+   red funcionaba (`curl` directo al registry y a un tarball concreto,
+   ambos con 200 OK) y que el proceso SÍ había tenido I/O real al
+   principio (lectura/escritura creciendo) antes de quedarse parado del
+   todo — descartando tanto un problema de red del entorno como un
+   proceso zombi desde el minuto uno. Con la causa probable acotada
+   (comportamiento intermitente de este `npm install` concreto en este
+   entorno, no reproducible de forma determinista), se mató el proceso y
+   se reintentó en primer plano con `--no-audit --no-fund --loglevel http`
+   — terminó en 7s sin problema. **Pendiente/nota para el futuro:** si
+   una instalación de npm en este proyecto vuelve a quedarse colgada
+   mucho tiempo sin I/O real, matar y reintentar en primer plano con
+   logging verboso es más fiable que esperar indefinidamente en segundo
+   plano.
+
+9. **`npm test` corre dentro del propio workflow de despliegue
+   (`.github/workflows/deploy.yml`), antes de `npm run build` — no
+   solo localmente antes de hacer push.** Coherente con la regla del
+   proyecto (CLAUDE.md: "no saltar a una fase sin que la anterior tenga
+   pruebas que pasen") aplicada también a CI: un futuro cambio que rompa
+   `npm test` no debería poder desplegarse a producción aunque alguien
+   olvide correr los tests a mano antes del push. `npm run test:datos`
+   (Fase 2, requiere red y no es determinista) deliberadamente NO se
+   incluye en el workflow — mismo motivo por el que ya está separado de
+   `npm test` en local.
+
+10. **`dist/` añadido a `.gitignore`, no committeado.** El build de
+    producción lo genera el propio workflow de GitHub Actions en cada
+    despliegue (paso `npm run build` → `actions/upload-pages-artifact`);
+    no hay ninguna razón para versionar un artefacto que se regenera
+    automáticamente en cada push a `main`, y evita divergencias entre lo
+    committeado y lo realmente desplegado.
