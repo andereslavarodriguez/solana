@@ -16,6 +16,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         parametros: resolve(__dirname, 'parametros.html'),
         escena3d: resolve(__dirname, 'escena3d.html'),
+        historico: resolve(__dirname, 'historico.html'),
       },
     },
   },

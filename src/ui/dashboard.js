@@ -8,11 +8,14 @@
 // a `[data-cargado="true"]` en vez de un timeout fijo o `networkidle`.
 
 import { obtenerDatosReales } from '../data/adaptador.js';
-import { cargarParametrosPiso } from '../persistencia/piso.js';
+import { cargarParametrosPiso, guardarParametrosPiso } from '../persistencia/piso.js';
 import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { cargarEstadoVentanas, guardarEstadoVentanas } from '../persistencia/estadoVentanas.js';
 import { listarAnotaciones, guardarAnotacion } from '../persistencia/anotaciones.js';
+import { cargarGemelo, guardarGemelo } from '../persistencia/gemelo.js';
 import { recomendarVentana, recomendarPersiana } from '../model/recomendacion.js';
+import { estadoGemeloInicial, pasoGemelo, regresoresPromedio } from '../model/gemelo.js';
+import { construirFilasRegresion, recalibrar } from '../model/recalibracion.js';
 import { estadoAntiguedad, horasDesde, formatoAntiguedad } from './antiguedadAnotacion.js';
 import { validarCampoNumerico, RANGOS } from './validacion.js';
 
@@ -34,6 +37,21 @@ export function montarDashboard(root, storage) {
   function anotacionMasReciente() {
     const anotaciones = listarAnotaciones(storage);
     return anotaciones.length ? anotaciones[anotaciones.length - 1] : null;
+  }
+
+  // Gemelo en vivo (Fase 7, src/model/gemelo.js): un T_in simulado que
+  // avanza en cada refresco de clima y se corrige al anotar. Sin nada
+  // guardado, se arranca desde la última anotación real si existe (p.ej.
+  // primera carga tras añadir esta fase, con anotaciones ya guardadas antes
+  // de que el gemelo existiera) — sin ninguna anotación todavía, se queda
+  // sin inicializar hasta la primera.
+  let gemelo = cargarGemelo(storage);
+  if (!gemelo) {
+    const ultima = anotacionMasReciente();
+    if (ultima) {
+      gemelo = estadoGemeloInicial(ultima.temperatura, ultima.timestamp);
+      guardarGemelo(storage, gemelo);
+    }
   }
 
   function calcularRecomendaciones(ahora = new Date()) {
@@ -73,6 +91,10 @@ export function montarDashboard(root, storage) {
     try {
       datosClima = await obtenerDatosReales(ubicacion.lat, ubicacion.lon);
       estadoClima = 'ok';
+      if (gemelo) {
+        gemelo = pasoGemelo(gemelo, new Date(), datosClima.actual, estadoVentanas, piso);
+        guardarGemelo(storage, gemelo);
+      }
     } catch (error) {
       estadoClima = 'error';
       console.error(error);
@@ -117,40 +139,73 @@ export function montarDashboard(root, storage) {
     if (formAnotacion) {
       formAnotacion.addEventListener('submit', (evento) => {
         evento.preventDefault();
-        manejarAnotacion(formAnotacion, storage, render);
+        manejarAnotacion(formAnotacion);
       });
     }
+  }
+
+  // Al anotar: el gemelo en vivo (si existe y ha avanzado al menos un paso
+  // desde la anotación anterior) aporta el "predicho" de este instante
+  // (spec.md §6.4) antes de corregirse al valor real — la corrección misma
+  // de spec.md §1. La recalibración (Fase 7, src/model/recalibracion.js) se
+  // intenta después, solo si esta anotación no lleva ninguna etiqueta
+  // (decisión: "automático tras cada anotación no etiquetada").
+  function manejarAnotacion(form) {
+    const inputTemperatura = form.elements.namedItem('temperatura');
+    const errorSpan = form.querySelector('#temperatura-error');
+    const error = validarCampoNumerico(inputTemperatura.value, RANGOS.temperaturaInterior);
+
+    inputTemperatura.classList.toggle('invalid', Boolean(error));
+    if (errorSpan) errorSpan.textContent = error ?? '';
+    if (error) {
+      inputTemperatura.focus();
+      return;
+    }
+
+    const temperatura = Number(inputTemperatura.value);
+    const etiquetas = ETIQUETAS.map((e) => e.id).filter(
+      (id) => form.elements.namedItem(id)?.checked,
+    );
+
+    const regs = gemelo ? regresoresPromedio(gemelo) : null;
+    const predicho = regs ? gemelo.tIn : null;
+
+    const anotacion = guardarAnotacion(storage, {
+      temperatura,
+      etiquetas,
+      predicho,
+      avgConduccion: regs ? regs.avgConduccion : null,
+      avgSolarVent: regs ? regs.avgSolarVent : null,
+    });
+
+    gemelo = estadoGemeloInicial(temperatura, anotacion.timestamp);
+    guardarGemelo(storage, gemelo);
+
+    if (etiquetas.length === 0) {
+      const filas = construirFilasRegresion(listarAnotaciones(storage));
+      const resultado = recalibrar(filas, piso);
+      if (resultado) {
+        piso.UA = resultado.UA;
+        piso.factorCapacidad = resultado.factorCapacidad;
+        guardarParametrosPiso(storage, piso);
+      }
+    }
+
+    render();
   }
 
   actualizarClima();
   setInterval(actualizarClima, INTERVALO_REFRESCO_MS);
 }
 
-function manejarAnotacion(form, storage, render) {
-  const inputTemperatura = form.elements.namedItem('temperatura');
-  const errorSpan = form.querySelector('#temperatura-error');
-  const error = validarCampoNumerico(inputTemperatura.value, RANGOS.temperaturaInterior);
-
-  inputTemperatura.classList.toggle('invalid', Boolean(error));
-  if (errorSpan) errorSpan.textContent = error ?? '';
-  if (error) {
-    inputTemperatura.focus();
-    return;
-  }
-
-  const etiquetas = ETIQUETAS.map((e) => e.id).filter(
-    (id) => form.elements.namedItem(id)?.checked,
-  );
-
-  guardarAnotacion(storage, { temperatura: Number(inputTemperatura.value), etiquetas });
-  render();
-}
-
 function plantilla({ piso, estadoVentanas, estadoClima, datosClima, ultimaAnotacion, recomendacionInfo }) {
   return `
     <header class="cabecera">
       <h1>Solana</h1>
-      <nav><a href="/parametros.html">Parámetros</a></nav>
+      <nav>
+        <a href="/historico.html">Histórico</a>
+        <a href="/parametros.html">Parámetros</a>
+      </nav>
     </header>
 
     ${tarjetaClima(estadoClima, datosClima)}

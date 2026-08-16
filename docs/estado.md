@@ -1,7 +1,7 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-15 (Fase 6 completa — checkpoint 24, la
-escena 3D integrada en `index.html` junto al dashboard, cierra la fase)
+Última actualización: 2026-08-16 (Fase 7 completa — histórico con
+predicho vs. real y recalibración automática, cierra la fase)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -110,147 +110,65 @@ tenga sus tests/verificación pasando y esté commiteada.
   `scripts/captura-escena3d.mjs` (mismo patrón que `captura-pantalla.mjs`,
   con espera opcional en ms para capturar la animación en marcha, y
   viewport opcional para verificar el layout de móvil).
+- **Fase 7 — Histórico, completa.** Predicho vs. real (spec.md §6.4) y
+  recalibración automática de `UA`/`factorCapacidad` (§4.2), resolviendo un
+  hueco real que la spec no cubría: no existía ningún histórico de clima
+  ni de estado de ventanas con el que reconstruir qué predecía el modelo
+  en el pasado. Solución — "gemelo en vivo"
+  (`src/model/gemelo.js`): un `T_in` simulado que avanza un paso
+  (`pasoGemelo`) cada vez que el dashboard refresca clima (cada 15 min o al
+  pulsar "Actualizar"), usando clima y estado de ventanas reales del
+  instante, persistido en `src/persistencia/gemelo.js`
+  (`solana:gemelo`); huecos largos (app cerrada) se rellenan repitiendo el
+  último clima conocido en pasos de 15 min (`simularHorizonte`, ya
+  existente), no con un único salto de Euler inestable. Al anotar
+  (`dashboard.js`), el valor del gemelo justo antes de corregirse es el
+  `predicho` de esa anotación (null en la primera anotación o si no hubo
+  ningún tick de por medio) — se guarda junto con la anotación
+  (`predicho`/`avgConduccion`/`avgSolarVent`, campos nuevos en
+  `anotaciones.js`) y el gemelo se reinicia al valor real. Recalibración
+  (`src/model/recalibracion.js`): cada anotación no etiquetada con
+  regresores calculados aporta una fila a una regresión lineal por mínimos
+  cuadrados (`dT_in/dt = a·(T_out−T_in) + b·(Q_solar+Q_vent)`, con
+  `a=UA/C`, `b=1/C`) sobre las últimas 30, con guardas de seguridad (mínimo
+  10 filas, sistema no degenerado, resultado dentro de rangos físicos
+  plausibles) antes de sobrescribir `parametrosPiso` — se dispara sola tras
+  cada anotación no etiquetada. Pantalla nueva `historico.html`
+  (`src/ui/historico.js`, montada vía `src/ui/main-historico.js`) con
+  Chart.js (dependencia nueva, primera de UI del proyecto): gráfica de
+  predicho vs. real, puntos etiquetados marcados en un color distinto y
+  excluidos del error medio mostrado, más una tarjeta de solo lectura con
+  `UA`/`factorCapacidad` actuales. 16 casos de prueba puros nuevos
+  (`test/gemelo.test.js`, `test/recalibracion.test.js`, incluida una
+  recuperación exacta de `UA`/`factorCapacidad` sintéticos por mínimos
+  cuadrados sin ruido) más 4 nuevos en `test/persistencia.test.js`,
+  integrados en `npm test`. Verificación visual con
+  `scripts/captura-historico.mjs` (mismo patrón que `captura-pantalla.mjs`,
+  sembrando anotaciones sintéticas en `localStorage` con
+  `page.addInitScript` ya que esta pantalla no hace ningún fetch) y una
+  comprobación funcional de extremo a extremo contra `index.html` con red
+  real (primera anotación con `predicho: null`, segunda con `predicho`
+  calculado de verdad). Un bug real encontrado y corregido por el camino
+  — ver "Decisiones tomadas".
 
 ## Fase actual
 
-Fase 6 — Escena 3D. Hechos los checkpoints 1-23: geometría/cámara fija,
-marco de ventana con sombra real, sol real, nubes/lluvia/noche/rayos con
-animación, composición de cámara para móvil en retrato (5); lluvia por
-partículas realista, tormenta con dato real de Open-Meteo, nubes con
-cantidad variable y algo de aleatoriedad, polvo en suspensión según el
-viento real (6); reflejo de cristal atenuado de noche, viento más
-visible, cielo con degradado (7); la habitación flota en una isla (cono
-invertido de tierra con rocas, tapa de hierba), con árbol, charco y
-viento con estela (8); ajustes de zoom/forma/buzón/lluvia/cielo (9);
-bugs de posición y texturas (10); isla más grande, hierba más verde,
-buzón en esquina, muro sin huecos, barro con contorno, filamentos con
-viento (11); contraste de lluvia, barro 3D real, más piedras sin
-superar la altura de la casa, "peter-panning" corregido en las sombras
-(12); y checkpoint 13: **agujeros de barro que ya no pueden aparecer
-dentro de la casa** (se convirtieron en toperas de verdad, mucho más
-pequeñas), cielo nublado con un azul-gris agradable en vez del gris
-morado feo de antes, piedras del muro que llegan hasta el borde real de
-la isla sin dejar hierba visible después, y el campo de hora del panel
-de depuración pasó de texto ISO escrito a mano a un selector nativo de
-fecha/hora. Implementado y verificado a fondo por Claude con capturas
-reales (incluidas varias rondas de bugs encontrados y corregidos, y en
-el checkpoint 13 verificación específica en 4 cargas de página distintas
-para confirmar que la exclusión de agujeros dentro de la casa es fiable
-pese a ser aleatoria — ver "Decisiones tomadas"); y checkpoint 14: los
-filamentos de hierba reciben la misma exclusión de la huella de la casa
-que las toperas, el muro de piedras del borde ya no deja huecos, la
-noche (despejada y nublada) usa tonos más cálidos, y una farola nueva
-en la esquina de la casa contraria al árbol da un punto de luz cálida
-con sombra real, encendida solo de noche; y checkpoint 15: la isla se
-encogió para permitir más zoom, la farola pasó a ser proporcional a la
-altura real de la casa (y siempre más alta que ella) con un bug de
-autosombra encontrado y corregido por el camino, el cielo azul se hizo
-más vivo (pensando en que será el fondo de toda la app), el polvo en
-suspensión ya alcanza la franja alta de cielo en el layout de móvil en
-retrato, el propio polvo se atenúa de noche (antes "parecía luciérnagas")
-y la farola también se enciende con más de un 75% de nubes, no solo de
-noche. Implementado y verificado a fondo por Claude con capturas reales
-(incluidas varias rondas de bugs encontrados y corregidos — el primer
-diseño de la farola apuntaba al centro de la casa y el haz se colaba en
-diagonal por el techo invisible, y ya escalada proporcionalmente se
-autosombreaba una cuña sobre su propio charco de luz, ver "Decisiones
-tomadas"); y checkpoint 16: la farola creció otro 50% y se movió al
-centro de la ventana trasera (ya no una esquina), con el brazo/pantalla
-reconstruidos como una pieza diagonal de verdad (antes quedaban
-flotando, sin tocar el poste ni la pantalla) y la sombra del poste
-reactivada; más zoom en toda la escena, aprovechando además un bug real
-encontrado y corregido en el encuadre de retrato (móvil) que aplastaba
-verticalmente la isla sin que nadie lo hubiera pedido así — confirmando
-la sospecha del usuario. Implementado y verificado a fondo por Claude
-con capturas reales (incluidas varias rondas de bugs encontrados y
-corregidos — la farola agrandada quedó primero pegada al cristal de la
-ventana, y el brazo/pantalla/poste originales no llegaban a tocarse
-entre sí, ver "Decisiones tomadas"); y checkpoint 17: la farola tipo
-"cobra" (checkpoints 14-16) se sustituyó por completo por una farola
-vintage más baja — poste corto sin brazo, farolillo con cristal cálido
-y una luz PUNTUAL (no un foco dirigido) que se reparte alrededor suyo en
-vez de concentrarse en un círculo hacia abajo, pensada explícitamente
-para reducir la zona oscura que dejaba el diseño anterior. Pedido
-explícito de probar primero con una sola antes de decidir si hacen
-falta dos (mover el árbol y añadir una segunda en la esquina opuesta) —
-**decisión pendiente del usuario tras ver esta primera versión**, ver
-"Decisiones tomadas". Implementado y verificado con capturas reales de
-día y de noche; y checkpoint 18 ("mejor" — confirmado por el usuario,
-seguimos con una sola farola por ahora): reposicionada a la esquina del
-tejado más opuesta a la cámara (antes en medio de la ventana trasera,
-para ver si así alumbraba más), y el farolillo pasó de una caja de
-cristal lisa a un farol de verdad con cuatro varillas metálicas en las
-esquinas. Claude propuso (sin implementar, pedido explícito de "solo
-proponlo") varias formas baratas de iluminar el resto de la isla — ver
-"Decisiones tomadas" para la lista, pendiente de que el usuario elija
-alguna; y checkpoint 19 (el usuario eligió el farolillo colgado del
-árbol de esa lista): la farola volvió a la ventana trasera (la esquina
-del checkpoint 18 no compensaba lo suficiente), sus varillas metálicas
-dejaron de proyectar sombra sobre su propio charco de luz, se añadió un
-farolillo colgado de una cuerda en el árbol (con su propio punto de luz
-cálido) y una `HemisphereLight` tenue de noche; y la luna real (fase,
-no posición — calculada con SunCalc vía `src/data/luna.js`, módulo
-nuevo) sale en el cielo con su forma real (nueva/creciente/llena) junto
-con estrellas cuya cantidad depende de cuánto alumbre la luna, con dos
-rondas serias de bugs de posicionamiento y de forma encontrados y
-corregidos por el camino (ver "Decisiones tomadas" — la luna no
-aparecía en ninguna captura al principio, y cuando apareció tenía la
-fase invertida: nueva se veía llena y viceversa); y checkpoint 20 (una
-ronda entera de retoques finos tras ver el checkpoint 19 en vivo): la
-luna, mucho más pequeña y más arriba, dejó de verse "enorme en medio de
-la pantalla"; un cuadrado blanco visible alrededor del disco y luego un
-anillo brillante en su borde, dos bugs reales distintos del mismo
-degradado de halo, corregidos por turnos; las estrellas, que solo
-salían en el lado izquierdo, ahora se reparten también a la derecha y
-con más densidad arriba (donde hay menos luz); y la sombra "mal" de la
-farola resultó no ser de las varillas (ya arregladas en el checkpoint
-19) sino del propio poste, coaxial con el foco — arreglado también. Ver
-"Decisiones tomadas" para el diagnóstico completo de cada bug, todos
-confirmados con captura real antes y después; y checkpoint 21 (el
-usuario reportó que varios de los arreglos del checkpoint 20 no se
-notaban todavía — cierto para algunos, ver "Decisiones tomadas" para
-el detalle de cada uno): la luna dejó de
-mostrar un tinte blanco en su lado oscuro (bug real del halo, distinto
-del cuadrado/anillo ya arreglados), las estrellas bajaron de tamaño y
-densidad y ganaron variación de tamaño/brillo con más brillo cuanto más
-arriba, se encontró y arregló una "shadow acne" seria en toda la escena
-a sol rasante (bias/normalBias desactualizados desde que la farola
-creció en checkpoints posteriores al ajuste original), y la farola se
-alejó de la ventana y creció otro 20%; y checkpoint 22 (la farola en sí
-"no estaba quedando muy bien" — sustitución completa de diseño, no un
-ajuste más): la farola tipo "vintage" (checkpoints 17-21, con
-base/farolillo propio/varillas/remate) se sustituyó por un poste en
-forma de horca del que cuelga el MISMO farolillo que ya usa el árbol
-(un helper nuevo, `construirFarolilloColgante`, compartido entre los
-dos), plantado en la hierba en vez de junto al muro de piedras. Ver
-"Decisiones tomadas" para el diagnóstico completo de cada bug (incluido
-uno real en la orientación del brazo de la horca, encontrado y
-corregido en la propia sesión), todos confirmados con captura real
-antes y después; y checkpoint 23 (el diseño en sí de la horca de
-madera "no era lo que buscaba" — otra sustitución de diseño, no un
-ajuste de tamaño/posición sobre el anterior): tres tablas planas de
-madera (vertical + horizontal + diagonal de refuerzo, en vez de los
-cilindros de metal del checkpoint 22) formando un triángulo real,
-pequeño, tipo soporte de cartel de jardín, con el mismo farolillo
-colgado del borde de la tabla horizontal; agrandado un 50% y
-reposicionado, primero a un lado del centro de la ventana (con la
-casa tapándolo parcialmente, pedido explícito de arreglarlo) y
-finalmente a la esquina real de la casa simétrica al árbol (misma
-técnica de "esquina más opuesta según `perp`" que ya usa el propio
-árbol para su posición). **Confirmado a ojo por el usuario.**
-Implementado y verificado a fondo con capturas reales en cada paso, ver
-"Decisiones tomadas" para el detalle completo; y checkpoint 24 (cierra
-la Fase 6): la escena 3D se integró en `index.html`, como un banner a
-ancho completo por encima del dashboard (Fase 5) — módulo nuevo
-`src/ui/escena3dDashboard.js`, contenedor `#escena3d-hero` HERMANO de
-`#app` (nunca dentro, para que el re-render de `dashboard.js` no pueda
-destruir el canvas WebGL — la duda que había quedado pendiente desde el
-checkpoint 1-3). Usa datos reales de clima/sol/luna (no el override de
-depuración, que sigue existiendo solo en `escena3d.html`), con
-`escena3d.html` dejado intacto como página de iteración aislada. De
-paso se encontró y corrigió un bug real preexistente en
-`main-escena3d.js` (no introducido por esta integración, pero
-descubierto al verificarla) — ver "Decisiones tomadas".
+Fase 7 — Histórico, completa (resumen detallado en "Hecho" y en
+"Decisiones tomadas" más abajo). El hueco real que resolvió la fase: no
+había ningún histórico de clima ni de estado de ventanas del que
+reconstruir predicciones pasadas, así que se diseñó un "gemelo en vivo"
+(`src/model/gemelo.js`) que simula `T_in` sin parar mientras la app está
+abierta y se corrige con cada anotación real — exactamente el patrón de
+gemelo digital de spec.md §1 (predice, se compara, se corrige), en vez de
+depender de una API de clima histórico nueva. Recalibración automática de
+`UA`/`factorCapacidad` por regresión lineal tras cada anotación no
+etiquetada, con guardas de seguridad para no sobrescribir con un ajuste
+sin sentido físico. Pantalla nueva `historico.html` con Chart.js (primera
+dependencia de UI del proyecto). Todo verificado con tests puros más una
+comprobación funcional de extremo a extremo contra el dashboard real.
+
+Siguiente: Fase 8 — PWA (manifest, service worker, instalable en
+Android), la última fase de la spec.
 
 ## Fases
 
@@ -273,7 +191,7 @@ descubierto al verificarla) — ver "Decisiones tomadas".
 - [x] **Fase 6 — Escena 3D.** Vista fija estilo Los Sims, geometría limpia,
       sol/sombra/nubes/lluvia en vivo (spec.md §6.1). Probablemente varias
       sesiones — no forzar que quepa en una.
-- [ ] **Fase 7 — Histórico.** Predicho vs. real, recalibración con las
+- [x] **Fase 7 — Histórico.** Predicho vs. real, recalibración con las
       últimas ~30 anotaciones no etiquetadas (spec.md §4.2, §6.4).
 - [ ] **Fase 8 — PWA.** Manifest, service worker, instalable en Android
       (spec.md §7).
@@ -2473,3 +2391,157 @@ todo la Fase 6".
    lluvia/viento/tormenta forzados) sin depender de que el clima real
    coincida con lo que se quiere probar, tal y como se decidió crearla
    en el checkpoint 1-3.
+
+### Fase 7 — Histórico
+
+Antes de construir nada se le planteó al usuario el hueco real que la
+spec no resuelve (§4.2/§6.4 piden "predicho vs. real" pero no cómo
+reconstruir qué predecía el modelo en el pasado sin ningún histórico de
+clima ni de estado de ventanas guardado) y se decidieron cuatro cosas
+con él antes de escribir código: arquitectura del "predicho" (gemelo en
+vivo vs. reconstrucción con Open-Meteo histórico), alcance de la
+regresión (UA solo vs. UA+factorCapacidad juntos), técnica de gráfica
+(SVG a mano vs. librería) y cuándo recalibrar (automático vs. manual vs.
+ambos) — resueltas como se detalla en las decisiones siguientes.
+
+1. **"Gemelo en vivo" en vez de reconstrucción con la API histórica de
+   Open-Meteo — elegido explícitamente por el usuario entre las dos
+   opciones planteadas.** Un `T_in` simulado (`src/model/gemelo.js`,
+   `pasoGemelo`) avanza un paso cada vez que `dashboard.js` refresca
+   clima (cada 15 min o al pulsar "Actualizar"), usando el clima y el
+   estado de ventanas REALES de ese instante, y se corrige al valor real
+   cada vez que el usuario anota — literalmente el patrón de gemelo
+   digital que describe spec.md §1 (predice, se compara con la
+   realidad, se corrige), sin necesitar ninguna API nueva ni asumir nada
+   sobre estados pasados de las ventanas (que nunca se han guardado).
+   Limitación aceptada a propósito: si la app pasa mucho tiempo cerrada,
+   ese hueco se reconstruye repitiendo el ÚLTIMO clima real conocido en
+   pasos de 15 min (`simularHorizonte`, ya existente en `termico.js`,
+   reutilizada sin cambios) en vez de con un único paso de Euler con un
+   `dt` enorme — un salto así sería numéricamente inestable para la
+   parte de conducción del modelo (`dT/dt = UA/C·(T_out−T_in)` diverge
+   con pasos grandes); repetir el mismo clima en pasos pequeños converge
+   de forma estable hacia `T_out`, verificado en `gemelo.test.js` con un
+   hueco de 3 días.
+
+2. **Los acumuladores de regresión se ponderan por segundos reales, no
+   por número de ticks.** `pasoGemelo` acumula `(T_out−T_in)` y
+   `(Q_solar+Q_vent)` en `sumConduccionSeg`/`sumSolarVentSeg`
+   multiplicados por los segundos reales transcurridos en cada llamada
+   (no +1 por tick) — así un hueco largo de catch-up (una sola llamada
+   que internamente da muchos pasos de `simularHorizonte`) pesa en el
+   promedio lo que de verdad duró, no lo mismo que un tick normal de 15
+   min. `regresoresPromedio()` divide por `segundosAcumulados`; devuelve
+   `null` si no hubo ningún tick desde el último reinicio (dos
+   anotaciones seguidas sin refresco de clima de por medio) — ese caso
+   se trata como "sin predicción", no como una predicción con regresores
+   a cero.
+
+3. **`predicho`/`avgConduccion`/`avgSolarVent` se guardan DENTRO de cada
+   anotación (`anotaciones.js`), no en un almacén de histórico
+   aparte.** Cada anotación ya es, por diseño, un punto en el tiempo con
+   su propio `timestamp` — añadirle estos tres campos opcionales
+   (`null` si no hay gemelo previo o no hubo ningún tick) evita crear
+   una segunda fuente de verdad que se pudiera desincronizar de la
+   lista de anotaciones. `construirFilasRegresion()`
+   (`recalibracion.js`) deriva `Δt`/`ΔT_real` de los `timestamp`/
+   `temperatura` de dos anotaciones consecutivas en vez de guardar esos
+   valores por duplicado.
+
+4. **Regresión conjunta de `UA` y `factorCapacidad` (no solo `UA`) —
+   elegido explícitamente por el usuario.** La ecuación del modelo es
+   lineal en dos parámetros combinados: `dT_in/dt = a·(T_out−T_in) +
+   b·(Q_solar+Q_vent)`, con `a=UA/C` y `b=1/C` — mínimos cuadrados
+   (ecuaciones normales 2×2) sobre las últimas `VENTANA_RECALIBRACION=30`
+   filas (cada fila = una anotación no etiquetada con regresores),
+   recuperando `C=1/b`, `UA=a·C` y `factorCapacidad=C/(volumen·densidad·
+   calorEspecífico)` — esta última constante se obtiene de
+   `capacidadTermica(piso)/piso.factorCapacidad` en vez de duplicar la
+   fórmula de `volumenZona()` (privada en `termico.js`). Verificado con
+   datos sintéticos sin ruido (`recalibracion.test.js`) que el ajuste
+   recupera exactamente un `UA`/`factorCapacidad` "reales" distintos de
+   los del piso de partida.
+
+5. **`MINIMO_FILAS_RECALIBRACION=10`, elegido a ojo (igual que los
+   umbrales 3h/12h de antigüedad de la Fase 5) — no derivado de
+   ningún dato real todavía.** Por debajo de ese mínimo no se intenta
+   recalibrar (demasiado ruido en una regresión de 2 parámetros sobre
+   pocas anotaciones escritas a mano). **Pendiente de ajustar con uso
+   real**, mismo criterio que ya se dejó anotado para los umbrales de
+   antigüedad.
+
+6. **Guardas de seguridad antes de sobrescribir `UA`/`factorCapacidad`:
+   sistema degenerado y resultado fuera de rango físico, ambos
+   rechazados con `null` (no se toca `parametrosPiso`).** Sistema
+   degenerado: determinante de las ecuaciones normales casi cero (p.ej.
+   `Q_solar+Q_vent` siempre 0 en todo el histórico reciente — persiana
+   bajada y ventana cerrada todo el rato — no hay información con la
+   que separar `a` de `b`). Fuera de rango: `UA`/`factorCapacidad`
+   resultantes fuera de `RANGOS.UA`/`RANGOS.factorCapacidad`
+   (`src/ui/validacion.js`, Fase 4) — duplicados como constantes locales
+   en `recalibracion.js` en vez de importados, a propósito: `src/model/`
+   no depende de `src/ui/` en ninguna otra fase, y una regresión sobre
+   anotaciones ruidosas puede dar un ajuste sin sentido físico aunque el
+   sistema no sea degenerado (p.ej. `C` positivo pero absurdamente
+   pequeño). "Last write wins" (decisión ya tomada en la Fase 4) solo
+   aplica a un resultado que pasa estas guardas — nunca se sobrescribe
+   con un ajuste dudoso.
+
+7. **Recalibración automática tras cada anotación NO etiquetada,
+   elegido explícitamente por el usuario entre automático/manual/ambos.**
+   `dashboard.js` la dispara dentro de `manejarAnotacion()` solo cuando
+   `etiquetas.length === 0`, reconstruyendo las filas desde CERO a partir
+   de `listarAnotaciones()` completo cada vez (no incremental) — con
+   como mucho unos pocos cientos de anotaciones en la vida realista de
+   este proyecto, recalcular es barato y evita mantener un segundo
+   estado acumulado sincronizado con las anotaciones guardadas. No hay
+   ningún botón manual en `historico.js` — esa pantalla es de solo
+   lectura a propósito, coherente con la decisión.
+
+8. **Chart.js, primera dependencia de UI del proyecto — elegido
+   explícitamente por el usuario en vez de SVG a mano.** Justificación
+   dada: soporte nativo para colorear puntos individuales
+   (`pointBackgroundColor` por índice, necesario para marcar distinto
+   los puntos etiquetados de spec.md §6.4) sin tener que escribir esa
+   lógica de posicionamiento a mano. Import `chart.js/auto` (registra
+   todos los componentes) para no gestionar el registro manual de
+   escalas/controladores. `options.animation:false` — bug real
+   encontrado en la propia verificación: la primera captura con
+   Playwright salió con casi todos los puntos aplastados cerca de la
+   parte baja del eje Y pese a que `chart.data.datasets[...].data`
+   contenía los valores correctos (confirmado inyectando la instancia
+   del chart en `window` temporalmente e inspeccionándola) — la
+   animación de entrada de Chart.js (~1s) todavía estaba a mitad de
+   interpolar desde el arranque cuando la captura se disparó justo
+   después de marcarse `[data-cargado="true"]`. Desactivar la animación
+   no es solo el arreglo técnico: coincide con el tono tranquilo de
+   CLAUDE.md para una pantalla de solo lectura que se consulta de un
+   vistazo, no un elemento "vivo" como la escena 3D.
+
+9. **Error medio mostrado en `historico.js`: media del valor absoluto
+   del error, no el error con signo.** Para el resumen que lee el
+   usuario ("cuánto se equivoca el modelo de media") un error con signo
+   se podría promediar a casi cero por cancelación entre sobre- y
+   sub-predicciones aunque el modelo fallara bastante en cada punto
+   individual — el valor absoluto sí refleja la magnitud real del
+   error. La regresión de recalibración en sí (`recalibracion.js`) SÍ
+   usa el error con signo (mínimos cuadrados sobre la pendiente
+   observada, no sobre su valor absoluto) porque ahí hace falta saber
+   en qué DIRECCIÓN corregir `UA`/`factorCapacidad`, no solo cuánto se
+   equivocó.
+
+10. **`historico.html` como página nueva (mismo patrón que
+    `parametros.html`/`escena3d.html`), no una sección dentro del
+    dashboard.** Es una pantalla de consulta ocasional, no de uso
+    diario — mismo criterio que ya separó parámetros del dashboard en
+    la Fase 5. `vite.config.js` gana una cuarta entrada de build.
+    Verificación visual nueva, `scripts/captura-historico.mjs` (mismo
+    patrón que `captura-pantalla.mjs`), con una diferencia real: esta
+    pantalla no hace ningún fetch (todo sale de `localStorage`), así
+    que la verificación siembra anotaciones sintéticas con
+    `page.addInitScript()` antes de navegar en vez de depender de red
+    real — y de paso se hizo una comprobación funcional aparte contra
+    el dashboard real (`index.html`, con red real) para confirmar que
+    la primera anotación queda con `predicho: null` y una segunda
+    anotación posterior sí lleva un `predicho` calculado de verdad, sin
+    errores de consola.

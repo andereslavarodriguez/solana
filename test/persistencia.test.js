@@ -9,6 +9,8 @@ import {
   cargarParametrosPiso,
 } from '../src/persistencia/piso.js';
 import { guardarAnotacion, listarAnotaciones } from '../src/persistencia/anotaciones.js';
+import { guardarGemelo, cargarGemelo } from '../src/persistencia/gemelo.js';
+import { estadoGemeloInicial } from '../src/model/gemelo.js';
 
 let ok = 0;
 function caso(nombre, fn) {
@@ -88,6 +90,51 @@ caso('dos anotaciones seguidas -> ids distintos, ambas conservadas en orden', ()
   const lista = listarAnotaciones(storage);
   assert.equal(lista.length, 2);
   assert.deepEqual(lista, [a1, a2]);
+});
+
+caso('sin predicho/regresores (Fase 7) -> quedan a null, no undefined', () => {
+  const storage = storageFalso();
+  const anotacion = guardarAnotacion(storage, { temperatura: 21 });
+  assert.equal(anotacion.predicho, null);
+  assert.equal(anotacion.avgConduccion, null);
+  assert.equal(anotacion.avgSolarVent, null);
+});
+
+caso('con predicho/regresores (Fase 7) -> se guardan y se recuperan tal cual', () => {
+  const storage = storageFalso();
+  const anotacion = guardarAnotacion(storage, {
+    temperatura: 21,
+    predicho: 21.8,
+    avgConduccion: -3.2,
+    avgSolarVent: 45.6,
+  });
+  assert.equal(anotacion.predicho, 21.8);
+  const lista = listarAnotaciones(storage);
+  assert.equal(lista[0].predicho, 21.8);
+  assert.equal(lista[0].avgConduccion, -3.2);
+  assert.equal(lista[0].avgSolarVent, 45.6);
+});
+
+console.log('\n--- gemelo en vivo (Fase 7) ---');
+
+caso('sin nada guardado -> cargarGemelo devuelve null', () => {
+  const storage = storageFalso();
+  assert.equal(cargarGemelo(storage), null);
+});
+
+caso('guardar y volver a cargar -> se recupera el mismo estado', () => {
+  const storage = storageFalso();
+  const estado = estadoGemeloInicial(21.5, '2026-01-01T10:00:00.000Z');
+  guardarGemelo(storage, estado);
+  const cargado = cargarGemelo(storage);
+  assert.deepEqual(cargado, estado);
+});
+
+caso('lo guardado en el storage incluye version: 1', () => {
+  const storage = storageFalso();
+  guardarGemelo(storage, estadoGemeloInicial(20, '2026-01-01T10:00:00.000Z'));
+  const crudo = JSON.parse(storage.getItem('solana:gemelo'));
+  assert.equal(crudo.version, 1);
 });
 
 console.log(`\n${ok} casos OK\n`);

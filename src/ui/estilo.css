@@ -191,6 +191,23 @@ button[type='submit']:hover {
   text-decoration: underline;
 }
 
+.cabecera nav {
+  display: flex;
+  gap: 1rem;
+}
+
+/* Histórico (Fase 7) */
+
+.contenedor-grafica {
+  position: relative;
+  height: 18rem;
+  margin: 1rem 0;
+}
+
+.marca-etiquetada {
+  color: var(--aviso);
+}
+
 .tarjeta {
   border: 1px solid var(--borde);
   border-radius: 0.75rem;
