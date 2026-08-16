@@ -1,17 +1,22 @@
-/* Estilo cálido y hogareño (CLAUDE.md): nada de estética de sala de control. */
+/* Estilo cálido y hogareño (CLAUDE.md): nada de estética de sala de
+   control. Minimalista y clásico a propósito — paleta oliva/carbón/lino
+   (nada de terracota, para no parecer una plantilla genérica de IA),
+   titulares en serif del sistema, esquinas casi rectas, color usado con
+   moderación en vez de bloques de fondo por todas partes. */
 
 :root {
-  --fondo: #faf3ea;
-  --papel: #fffaf3;
-  --papel-calibrable: #fdf1de;
-  --borde: #e6d7c3;
-  --texto: #4a3f35;
-  --texto-suave: #8a7a68;
-  --acento: #c97b4a;
-  --acento-oscuro: #a86139;
-  --error: #b5484c;
-  --aviso: #b8873a;
-  --aviso-fondo: #fbecd2;
+  --fondo: #f3f1ea;
+  --papel: #fffffe;
+  --borde: #ddd9cc;
+  --texto: #262420;
+  --texto-suave: #78766c;
+  --acento: #55654a;
+  --acento-oscuro: #3e4b37;
+  --error: #9c3f36;
+  --aviso: #8f6c1f;
+  --aviso-fondo: #f4eddb;
+  --tipo-titular: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+  --tipo-texto: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
 * {
@@ -22,8 +27,12 @@ body {
   margin: 0;
   background: var(--fondo);
   color: var(--texto);
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: var(--tipo-texto);
   line-height: 1.5;
+}
+
+a {
+  color: var(--acento-oscuro);
 }
 
 #app {
@@ -76,33 +85,38 @@ body {
 }
 
 h1 {
-  font-weight: 500;
-  font-size: 1.6rem;
+  font-family: var(--tipo-titular);
+  font-weight: 400;
+  font-size: 1.7rem;
+  letter-spacing: 0.01em;
   margin-bottom: 1.25rem;
 }
 
 h2 {
-  font-weight: 500;
-  font-size: 1rem;
+  font-family: var(--tipo-titular);
+  font-weight: 400;
+  font-style: italic;
+  font-size: 1.05rem;
   color: var(--texto-suave);
   margin: 1.5rem 0 0.5rem;
 }
 
 .seccion {
   border: 1px solid var(--borde);
-  border-radius: 0.75rem;
+  border-radius: 0.2rem;
   padding: 0.5rem 1.25rem 1.25rem;
   margin-bottom: 1.5rem;
   background: var(--papel);
 }
 
 .seccion legend {
-  font-weight: 600;
+  font-family: var(--tipo-titular);
+  font-weight: 400;
   padding: 0 0.5rem;
 }
 
 .seccion-calibrable {
-  background: var(--papel-calibrable);
+  border-left: 3px solid var(--acento);
 }
 
 .nota {
@@ -127,7 +141,7 @@ input[type='number'] {
   font-size: 1rem;
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--borde);
-  border-radius: 0.5rem;
+  border-radius: 0.15rem;
   background: #fff;
   color: var(--texto);
 }
@@ -151,8 +165,8 @@ input.invalid {
 button[type='submit'] {
   font-size: 1rem;
   padding: 0.7rem 1.5rem;
-  border: none;
-  border-radius: 0.6rem;
+  border: 1px solid var(--acento);
+  border-radius: 0.15rem;
   background: var(--acento);
   color: #fff;
   cursor: pointer;
@@ -160,6 +174,7 @@ button[type='submit'] {
 
 button[type='submit']:hover {
   background: var(--acento-oscuro);
+  border-color: var(--acento-oscuro);
 }
 
 #mensaje-guardado {
@@ -175,6 +190,8 @@ button[type='submit']:hover {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--borde);
+  padding-bottom: 0.9rem;
 }
 
 .cabecera h1 {
@@ -182,18 +199,20 @@ button[type='submit']:hover {
 }
 
 .cabecera nav a {
-  color: var(--acento-oscuro);
+  color: var(--texto);
   text-decoration: none;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid transparent;
 }
 
 .cabecera nav a:hover {
-  text-decoration: underline;
+  border-bottom-color: var(--acento);
 }
 
 .cabecera nav {
   display: flex;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 /* Histórico (Fase 7) */
@@ -210,7 +229,7 @@ button[type='submit']:hover {
 
 .tarjeta {
   border: 1px solid var(--borde);
-  border-radius: 0.75rem;
+  border-radius: 0.2rem;
   padding: 1.1rem 1.25rem;
   margin-bottom: 1.25rem;
   background: var(--papel);
@@ -243,21 +262,23 @@ button[type='submit']:hover {
 
 .datos-clima dd {
   margin: 0;
-  font-size: 1.3rem;
+  font-family: var(--tipo-titular);
+  font-size: 1.35rem;
 }
 
 button[type='button'] {
   font-size: 0.9rem;
   padding: 0.5rem 1.1rem;
   border: 1px solid var(--acento);
-  border-radius: 0.6rem;
+  border-radius: 0.15rem;
   background: transparent;
   color: var(--acento-oscuro);
   cursor: pointer;
 }
 
 button[type='button']:hover {
-  background: var(--papel-calibrable);
+  background: var(--acento);
+  color: #fff;
 }
 
 .etiquetas {
@@ -325,7 +346,7 @@ button[type='button']:hover {
 .aviso-antiguedad {
   color: var(--aviso);
   background: var(--aviso-fondo);
-  border-radius: 0.5rem;
+  border-radius: 0.15rem;
   padding: 0.4rem 0.6rem;
   font-size: 0.85rem;
 }
@@ -342,9 +363,9 @@ button[type='button']:hover {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
-  background: rgba(255, 250, 243, 0.9);
+  background: rgba(255, 255, 254, 0.92);
   border: 1px solid var(--borde);
-  border-radius: 0.5rem;
+  border-radius: 0.15rem;
   padding: 0.5rem 0.6rem;
   font-size: 0.8rem;
 }
@@ -367,7 +388,7 @@ button[type='button']:hover {
   background: var(--acento);
   color: #fff;
   border: none;
-  border-radius: 0.4rem;
+  border-radius: 0.15rem;
   padding: 0.35rem 0.6rem;
   font-size: 0.8rem;
   cursor: pointer;

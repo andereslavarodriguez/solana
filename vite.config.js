@@ -37,8 +37,8 @@ export default defineConfig({
           'Gemelo digital del salón-cocina: clima y sol reales, recomendación de ventana y persiana por ventana, histórico predicho vs. real.',
         lang: 'es',
         display: 'standalone',
-        background_color: '#faf3ea',
-        theme_color: '#c97b4a',
+        background_color: '#f3f1ea',
+        theme_color: '#55654a',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

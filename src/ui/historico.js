@@ -128,9 +128,9 @@ function dibujarGrafica(canvas, anotaciones) {
   const real = anotaciones.map((a) => a.temperatura);
   const predicho = anotaciones.map((a) => a.predicho);
 
-  const colorEtiquetada = colorCss('--aviso', '#b8873a');
-  const colorNormal = colorCss('--acento', '#c97b4a');
-  const colorPredicho = colorCss('--texto-suave', '#8a7a68');
+  const colorEtiquetada = colorCss('--aviso', '#8f6c1f');
+  const colorNormal = colorCss('--acento', '#55654a');
+  const colorPredicho = colorCss('--texto-suave', '#78766c');
 
   const puntoColor = anotaciones.map((a) =>
     a.etiquetas && a.etiquetas.length > 0 ? colorEtiquetada : colorNormal,
