@@ -2706,3 +2706,41 @@ ambos) — resueltas como se detalla en las decisiones siguientes.
     no hay ninguna razón para versionar un artefacto que se regenera
     automáticamente en cada push a `main`, y evita divergencias entre lo
     committeado y lo realmente desplegado.
+
+11. **Bug real encontrado por el usuario probando en su móvil real (no en
+    ninguna de las verificaciones anteriores): la navegación interna
+    entre dashboard/parámetros/histórico estaba rota en producción,
+    online y offline por igual — no solo un problema de PWA.** Los
+    enlaces cruzados (`dashboard.js`, `historico.js`, `parametros.js`)
+    usaban rutas absolutas de raíz (`href="/parametros.html"`,
+    `href="/"`) generadas dentro de plantillas JS (template strings), no
+    como atributos HTML estáticos — Vite solo reescribe con el prefijo
+    `base` (`/solana/`) las URLs que puede ver en el HTML en tiempo de
+    build (`<script src>`, `<link href>`, etc.; confirmado en la Fase 8
+    decisión 3 de este mismo documento), nunca dentro de un string
+    generado en tiempo de ejecución. En producción esos enlaces
+    apuntaban a `https://andereslavarodriguez.github.io/parametros.html`
+    (la raíz del usuario en GitHub Pages) en vez de
+    `.../solana/parametros.html` — un 404 real incluso online, que había
+    pasado desapercibido en todas las verificaciones previas porque
+    `npm run dev`/`vite preview` sirven bajo la ruta completa de todas
+    formas al navegar con la barra de direcciones, y ninguna verificación
+    anterior (Fases 4-8) había probado un CLIC en los enlaces de
+    navegación cruzada contra un build real desplegado — solo `page.goto()`
+    directo a cada URL. Diagnosticado reproduciendo offline contra el
+    sitio real ya desplegado (no solo contra `vite preview` en local, que
+    no expone este bug porque ahí la app vive en la raíz del dominio):
+    `page.goto()` a cada página funcionaba bien offline (coincide con la
+    URL exacta precacheada), pero hacer clic en los enlaces desde dentro
+    del dashboard llevaba a `chrome-error://chromewebdata/` — confirmando
+    que el problema no era el service worker sino la URL de destino en
+    sí. Arreglado a rutas relativas sin barra inicial
+    (`href="parametros.html"`, `href="index.html"`), que resuelven bien
+    tanto en dev como en producción sin depender de ningún valor de
+    `base` — más robusto que hardcodear `/solana/` a mano, y coherente
+    con la lección ya aprendida en la Fase 4 (decisión 2) sobre lo frágil
+    que es ese valor. **Lección para verificaciones futuras:** probar
+    clics reales en la navegación (no solo `goto()` a cada URL por
+    separado) y, cuando sea posible, verificar contra el sitio ya
+    desplegado además de contra `vite preview` local — ambos escapan
+    bugs que dependen del subpath real de despliegue.
