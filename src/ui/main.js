@@ -1,3 +1,4 @@
+import './registrarServiceWorker.js';
 import { montarDashboard } from './dashboard.js';
 import { montarEscena3D } from './escena3dDashboard.js';
 
