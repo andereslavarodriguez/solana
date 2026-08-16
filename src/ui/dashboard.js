@@ -203,8 +203,8 @@ function plantilla({ piso, estadoVentanas, estadoClima, datosClima, ultimaAnotac
     <header class="cabecera">
       <h1>Solana</h1>
       <nav>
-        <a href="/historico.html">Histórico</a>
-        <a href="/parametros.html">Parámetros</a>
+        <a href="historico.html">Histórico</a>
+        <a href="parametros.html">Parámetros</a>
       </nav>
     </header>
 

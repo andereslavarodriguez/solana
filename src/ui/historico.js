@@ -54,8 +54,8 @@ function cabecera() {
     <header class="cabecera">
       <h1>Histórico</h1>
       <nav>
-        <a href="/">← Panel</a>
-        <a href="/parametros.html">Parámetros</a>
+        <a href="index.html">← Panel</a>
+        <a href="parametros.html">Parámetros</a>
       </nav>
     </header>
   `;
@@ -107,7 +107,7 @@ function plantilla(anotaciones, piso) {
       <p class="nota">
         Se recalibran solos tras cada anotación no etiquetada, con las
         últimas ${Math.min(anotaciones.length, VENTANA_RECALIBRACION)} de ellas. Editables a mano en
-        <a href="/parametros.html">Parámetros</a> (una recalibración
+        <a href="parametros.html">Parámetros</a> (una recalibración
         posterior los sobrescribe sin avisar).
       </p>
       <dl class="datos-clima">

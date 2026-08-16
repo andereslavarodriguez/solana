@@ -42,7 +42,7 @@ function plantilla(piso, ubicacion) {
     <form id="form-parametros" novalidate>
       <header class="cabecera">
         <h1>Parámetros del piso</h1>
-        <nav><a href="/">← Volver al panel</a></nav>
+        <nav><a href="index.html">← Volver al panel</a></nav>
       </header>
 
       <fieldset class="seccion seccion-fija">
