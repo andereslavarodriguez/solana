@@ -15,6 +15,7 @@
   --error: #9c3f36;
   --aviso: #8f6c1f;
   --aviso-fondo: #f4eddb;
+  --acento-fondo: #e8ece3;
   --tipo-titular: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
   --tipo-texto: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -473,21 +474,6 @@ button.boton-icono:hover {
   font-size: 1.05rem;
 }
 
-.recomendacion-linea {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0.2rem 0;
-  font-size: 0.9rem;
-}
-
-.recomendacion-linea svg {
-  width: 1.1rem;
-  height: 1.1rem;
-  color: var(--texto-suave);
-  flex-shrink: 0;
-}
-
 .aviso-antiguedad-compacto {
   color: var(--aviso);
   background: var(--aviso-fondo);
@@ -497,40 +483,100 @@ button.boton-icono:hover {
   font-size: 0.78rem;
 }
 
-.fila-controles {
+/* Interruptor real (ventana/persiana) — sustituye al botón "icono+color"
+   anterior, pedido explícito del usuario ("no se entiende bien si está
+   abierta o cerrada, ponlo como un interruptor"). Un interruptor deslizante
+   es un patrón ya conocido de cualquier ajuste de móvil, así que el estado
+   se lee sin tener que interpretar un color de fondo — se refuerza además
+   con la palabra de estado a la izquierda (Abierta/Cerrada,
+   Subida/Bajada), que ya existía pero antes vivía DENTRO del botón. */
+.fila-control {
   display: flex;
-  gap: 0.6rem;
-  margin-top: 0.6rem;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
 }
 
-/* Botón interruptor único (ventana/persiana) — sustituye al checkbox de
-   "Ventana abierta"/"Persiana subida", pedido explícito del usuario
-   ("marcar un cuadrado no me gusta, piensa otra forma"). Icono y color
-   cambian con el estado; tocarlo lo invierte. */
-button.control-estado {
-  flex: 1;
+.control-etiqueta {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  border: 1px solid var(--borde);
-  border-radius: 0.2rem;
-  background: #fff;
+  gap: 0.4rem;
+  flex: 1;
   color: var(--texto-suave);
-  padding: 0.5rem 0.4rem;
-  font-size: 0.78rem;
+  font-size: 0.85rem;
+}
+
+.control-etiqueta svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+}
+
+.control-estado-texto {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  min-width: 3.6rem;
+  text-align: right;
+}
+
+.control-estado-texto.activo {
+  color: var(--acento-oscuro);
+}
+
+button.interruptor {
+  flex-shrink: 0;
+  position: relative;
+  width: 3rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: #fff;
   cursor: pointer;
 }
 
-.control-estado svg {
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-button.control-estado.activo {
+button.interruptor.activo {
   border-color: var(--acento);
   background: var(--acento);
-  color: #fff;
+}
+
+.interruptor-bola {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--texto-suave);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+button.interruptor.activo .interruptor-bola {
+  transform: translateX(1.3rem);
+  background: #fff;
+}
+
+/* Pista de recomendación, una por control (ventana/persiana) en vez de dos
+   líneas sueltas arriba de la tarjeta sin ligar a ningún botón concreto —
+   pedido explícito del usuario ("tampoco se entiende bien lo que
+   recomienda hacer"). Compara el estado real con el recomendado: si
+   coinciden, aviso discreto; si no, aviso con acento que llama a actuar. */
+.pista-control {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+}
+
+.pista-ok {
+  color: var(--texto-suave);
+}
+
+.pista-cambiar {
+  color: var(--acento-oscuro);
+  background: var(--acento-fondo);
+  border-radius: 0.15rem;
+  padding: 0.25rem 0.5rem;
+  font-weight: 600;
 }
 
 /* Panel de depuración de escena3d.html (Fase 6, checkpoint 4): solo para

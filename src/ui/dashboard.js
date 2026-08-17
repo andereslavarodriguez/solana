@@ -136,7 +136,7 @@ export function montarDashboard(root, storage) {
   }
 
   function conectarEventos() {
-    root.querySelectorAll('.control-estado').forEach((boton) => {
+    root.querySelectorAll('.interruptor').forEach((boton) => {
       boton.addEventListener('click', () => {
         const nombreVentana = boton.dataset.ventana;
         const campo = boton.dataset.campo;
@@ -322,57 +322,87 @@ function tarjetaVentana(ventana, estadoVentana, recomendacionInfo) {
   return `
     <section class="tarjeta-ventana-compacta" data-ventana="${ventana.nombre}">
       <h3>${etiquetaCompass(ventana.orientacion)}</h3>
-      ${recomendacionCompacta(ventana.nombre, recomendacionInfo, rec)}
-      <div class="fila-controles">
-        <button
-          type="button"
-          class="control-estado ${estadoVentana.abierta ? 'activo' : ''}"
-          data-ventana="${ventana.nombre}"
-          data-campo="abierta"
-        >
-          ${estadoVentana.abierta ? iconoVentanaAbierta() : iconoVentanaCerrada()}
-          <span>${estadoVentana.abierta ? 'Abierta' : 'Cerrada'}</span>
-        </button>
-        <button
-          type="button"
-          class="control-estado ${estadoVentana.persianaArriba ? 'activo' : ''}"
-          data-ventana="${ventana.nombre}"
-          data-campo="persianaArriba"
-        >
-          ${estadoVentana.persianaArriba ? iconoPersianaSubida() : iconoPersianaBajada()}
-          <span>${estadoVentana.persianaArriba ? 'Subida' : 'Bajada'}</span>
-        </button>
-      </div>
+      ${!rec ? mensajeSinRecomendacion(recomendacionInfo) : ''}
+      ${rec && recomendacionInfo.estado === 'aviso' ? `<p class="aviso-antiguedad-compacto">Anotación ${formatoAntiguedad(recomendacionInfo.horas)}, puede estar vieja.</p>` : ''}
+
+      ${filaControl({
+        nombreVentana: ventana.nombre,
+        campo: 'abierta',
+        activo: estadoVentana.abierta,
+        icono: estadoVentana.abierta ? iconoVentanaAbierta() : iconoVentanaCerrada(),
+        etiqueta: 'Ventana',
+        textoActivo: 'Abierta',
+        textoInactivo: 'Cerrada',
+      })}
+      ${rec ? pistaControl(estadoVentana.abierta, rec.ventana.accion === 'abrir', 'abrir', 'cerrar', rec.ventana.proximoCambio) : ''}
+
+      ${filaControl({
+        nombreVentana: ventana.nombre,
+        campo: 'persianaArriba',
+        activo: estadoVentana.persianaArriba,
+        icono: estadoVentana.persianaArriba ? iconoPersianaSubida() : iconoPersianaBajada(),
+        etiqueta: 'Persiana',
+        textoActivo: 'Subida',
+        textoInactivo: 'Bajada',
+      })}
+      ${rec ? pistaControl(estadoVentana.persianaArriba, rec.persiana.accion === 'arriba', 'subir', 'bajar', rec.persiana.proximoCambio) : ''}
     </section>
   `;
 }
 
-function recomendacionCompacta(nombreVentana, info, rec) {
-  if (info.estado === 'cargando') {
-    return '<p class="recomendacion-vacia">Cargando…</p>';
-  }
-  if (info.estado === 'error') {
-    return '<p class="recomendacion-vacia">Sin clima en vivo.</p>';
-  }
-  if (info.estado === 'sin-anotacion') {
-    return '<p class="recomendacion-vacia">Anota la temperatura interior.</p>';
-  }
+// Fila de control con interruptor real — sustituye al botón "icono+color
+// de fondo" anterior (docs/estado.md, checkpoint "Rediseño de interfaz
+// móvil"), pedido explícito del usuario: "no se entiende bien si está
+// abierta o cerrada, ponlo como un interruptor". La palabra de estado
+// (Abierta/Cerrada, Subida/Bajada) queda fuera del interruptor, a su
+// izquierda, para no depender solo de la posición del interruptor.
+function filaControl({ nombreVentana, campo, activo, icono, etiqueta, textoActivo, textoInactivo }) {
+  const texto = activo ? textoActivo : textoInactivo;
+  return `
+    <div class="fila-control">
+      <span class="control-etiqueta">${icono}${etiqueta}</span>
+      <span class="control-estado-texto ${activo ? 'activo' : ''}">${texto}</span>
+      <button
+        type="button"
+        class="interruptor ${activo ? 'activo' : ''}"
+        role="switch"
+        aria-checked="${activo}"
+        aria-label="${etiqueta}: ${texto.toLowerCase()}"
+        data-ventana="${nombreVentana}"
+        data-campo="${campo}"
+      >
+        <span class="interruptor-bola"></span>
+      </button>
+    </div>
+  `;
+}
+
+function mensajeSinRecomendacion(info) {
+  if (info.estado === 'cargando') return '<p class="recomendacion-vacia">Cargando…</p>';
+  if (info.estado === 'error') return '<p class="recomendacion-vacia">Sin clima en vivo.</p>';
+  if (info.estado === 'sin-anotacion') return '<p class="recomendacion-vacia">Anota la temperatura interior.</p>';
   if (info.estado === 'caducada') {
     return `<p class="recomendacion-vacia">Anotación ${formatoAntiguedad(info.horas)} — anota otra.</p>`;
   }
+  return '';
+}
 
-  const iconoVentanaRec = rec.ventana.accion === 'abrir' ? iconoVentanaAbierta() : iconoVentanaCerrada();
-  const iconoPersianaRec = rec.persiana.accion === 'arriba' ? iconoPersianaSubida() : iconoPersianaBajada();
-  const avisoAntiguedad =
-    info.estado === 'aviso'
-      ? `<p class="aviso-antiguedad-compacto">Anotación ${formatoAntiguedad(info.horas)}, puede estar vieja.</p>`
-      : '';
-
-  return `
-    <p class="recomendacion-linea">${iconoVentanaRec}${rec.ventana.accion === 'abrir' ? 'Abrir' : 'Cerrar'}${proximoCambioHtml(rec.ventana.proximoCambio)}</p>
-    <p class="recomendacion-linea">${iconoPersianaRec}${rec.persiana.accion === 'arriba' ? 'Subir' : 'Bajar'}${proximoCambioHtml(rec.persiana.proximoCambio)}</p>
-    ${avisoAntiguedad}
-  `;
+// Pista de recomendación, ligada a un control concreto (ventana O persiana)
+// en vez de dos líneas sueltas arriba de la tarjeta sin relación visual
+// clara con ningún botón — pedido explícito del usuario: "tampoco se
+// entiende muy bien lo que recomienda hacer". Compara el estado real
+// (`estadoActual`) con el que recomienda el motor (`objetivo`): si ya
+// coinciden, un aviso discreto; si no, un aviso con acento que señala la
+// acción a tomar ahora mismo. El "próximo cambio" (spec.md, mejora
+// post-lanzamiento del 2026-08-17) solo se muestra cuando el estado actual
+// ya es el recomendado — si no coincide, mostrar ya un cambio futuro
+// distraería de la acción inmediata que hace falta.
+function pistaControl(estadoActual, objetivo, verboActivar, verboDesactivar, proximoCambio) {
+  if (estadoActual === objetivo) {
+    return `<p class="pista-control pista-ok">Así está bien${proximoCambioHtml(proximoCambio)}</p>`;
+  }
+  const verbo = objetivo ? verboActivar : verboDesactivar;
+  return `<p class="pista-control pista-cambiar">Recomendado: ${verbo.charAt(0).toUpperCase()}${verbo.slice(1)}</p>`;
 }
 
 // Mejora post-lanzamiento (2026-08-17, docs/estado.md): recomendarVentana/

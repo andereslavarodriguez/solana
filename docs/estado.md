@@ -1,9 +1,8 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-17 (rediseño de la interfaz para móvil:
-pestañas fijas abajo, "Inicio" compacto sin escena 3D ni scroll, botones
-interruptor en vez de checkboxes, ventanas identificadas por punto
-cardinal — ver "Rediseño de interfaz móvil" al final del documento)
+Última actualización: 2026-08-17 (interruptores reales de verdad para
+ventana/persiana y recomendación ligada a cada control — ver "Interruptores
+reales y recomendación ligada a cada control" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3458,3 +3457,64 @@ real") — llegó antes de lo esperado.
    cerradas/persiana bajada): las dos tarjetas muestran una combinación
    coherente ("Suroeste: cerrar/bajar", "Noreste: cerrar (abrir en
    2.3h)/subir"), sin errores de consola.
+
+### Interruptores reales y recomendación ligada a cada control (2026-08-17)
+
+El usuario, usando la app instalada, reportó dos problemas de legibilidad
+distintos: "no se acaba de entender muy bien si las ventanas están
+cerradas o abiertas, creo que sería mejor cambiarlo a un interruptor" y
+"tampoco se entiende muy bien lo que recomienda hacer". El botón
+"icono+color de fondo" de la Fase 6 (checkpoint "Rediseño de interfaz
+móvil") ya había sustituido al checkbox original, pero seguía siendo un
+patrón propio sin convención reconocible; y las dos líneas de
+recomendación vivían aparte, arriba de los propios controles, sin ninguna
+relación visual directa con el botón al que se referían.
+
+1. **`.control-estado` (botón con icono+fondo de color) sustituido por un
+   interruptor deslizante real (pista+bola, patrón de ajustes de móvil ya
+   conocido por cualquier usuario) — no un ajuste de color sobre el
+   mismo diseño.** `filaControl()` en `dashboard.js` genera una fila con
+   tres piezas: icono+etiqueta fija ("Ventana"/"Persiana") a la
+   izquierda, la palabra de estado actual (Abierta/Cerrada,
+   Subida/Bajada) en el centro, y el interruptor a la derecha —
+   `role="switch"`/`aria-checked` para que el estado también sea
+   explícito para lectores de pantalla, no solo visualmente. El listener
+   de clic pasó de `.control-estado` a `.interruptor`, mismo
+   comportamiento (invierte `estadoVentanas[nombre][campo]` y persiste).
+
+2. **Recomendación ligada a cada control por separado, no dos líneas
+   sueltas arriba de la tarjeta.** `pistaControl()` compara el estado
+   FÍSICO real de ese control concreto con el que recomienda
+   `recomendarPiso` (Fase 1/correcciones post-lanzamiento) para ese mismo
+   campo: si coinciden, un aviso discreto y de bajo peso visual ("Así
+   está bien", con el "próximo cambio" ya existente como inciso si lo
+   hay); si no coinciden, un aviso con acento y fondo tenue ("Recomendado:
+   Abrir") pegado justo debajo del interruptor que hay que tocar. Con esto
+   la pregunta que antes exigía leer dos frases y compararlas mentalmente
+   con dos botones aparte ("¿qué recomienda y coincide con lo que tengo
+   puesto?") queda resuelta con una sola mirada por control.
+
+3. **El "próximo cambio" solo se muestra en la rama "así está bien", no en
+   la de mismatch — decisión deliberada, no un descuido.** Si el control
+   ya está mal puesto ahora mismo, mostrar además cuándo tocaría cambiarlo
+   en el futuro (que presupone haber hecho ya el cambio actual) distraería
+   de la acción inmediata que hace falta — coherente con "más simple y
+   entendible", el pedido explícito del usuario.
+
+4. **`--acento-fondo` nueva variable CSS (`#e8ece3`), mismo patrón que
+   `--aviso-fondo` ya existente** — fondo tenue del mismo tono que
+   `--acento` para el aviso "Recomendado: X", en vez de reutilizar
+   `--aviso-fondo` (reservado para el aviso real de antigüedad de
+   anotación, un concepto distinto que no debía confundirse visualmente
+   con este).
+
+5. **Verificación:** `npm test` (127 casos, sin tocar ningún módulo de
+   `src/model`/`src/data`/`src/persistencia` — cambio íntegramente de UI)
+   y `npm run build` sin errores. Visual con Playwright en viewport de
+   móvil (393×852): estado inicial sin anotación (interruptores apagados,
+   sin pista de recomendación); con una anotación de 27.5°C que fuerza
+   mismatch en una persiana (pista "Recomendado: Subir" visible, resaltada,
+   junto al interruptor correspondiente); y con los cuatro interruptores
+   activados a mano (estado "activo" en verde, bola desplazada a la
+   derecha, claramente distinguible del estado apagado) — sin errores de
+   consola en ningún caso.
