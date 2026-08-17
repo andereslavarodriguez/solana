@@ -1,8 +1,8 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-17 (interruptores reales de verdad para
-ventana/persiana y recomendación ligada a cada control — ver "Interruptores
-reales y recomendación ligada a cada control" al final del documento)
+Última actualización: 2026-08-17 (se puede borrar una anotación del
+histórico — ver "Borrado de anotaciones del histórico" al final del
+documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3518,3 +3518,85 @@ relación visual directa con el botón al que se referían.
    activados a mano (estado "activo" en verde, bola desplazada a la
    derecha, claramente distinguible del estado apagado) — sin errores de
    consola en ningún caso.
+
+### Borrado de anotaciones del histórico (2026-08-17)
+
+Pedido explícito del usuario: "quiero que hagas que los datos históricos se
+puedan borrar. imagina que has metido un dato por error, pues debería
+poder borrarse" — no existía ninguna forma de corregir una anotación mal
+escrita (temperatura equivocada, pulsación accidental) salvo vivir con
+ella para siempre en el histórico y en la recalibración automática.
+
+1. **`borrarAnotacion(storage, id)` (`src/persistencia/anotaciones.js`),
+   nueva — e invalida a `null` el `predicho`/`avgConduccion`/`avgSolarVent`
+   de la anotación siguiente si los tenía, no solo quita la borrada de la
+   lista.** Esos tres campos (Fase 7) describen el intervalo del gemelo en
+   vivo entre una anotación y la INMEDIATAMENTE anterior — al borrar esa
+   anterior, el hueco real hasta la anterior superviviente pasa a ser más
+   largo del que esos regresores describen, así que dejarlos como estaban
+   los volvería incoherentes con el nuevo hueco (el mismo tipo de error
+   que ya se razonó, en la dirección contraria, en las decisiones de
+   ponderación temporal de la Fase 7). `construirFilasRegresion()` ya
+   ignora filas sin regresores, así que invalidarlas a `null` basta —no
+   hace falta recalcular nada con el gemelo, que no tiene memoria del
+   pasado más allá de su estado actual.
+
+2. **Borrar una anotación no etiquetada dispara una recalibración,
+   igual que anotar una nueva — mismo criterio que dashboard.js
+   (`manejarAnotacion`), reconstruyendo las filas desde cero con
+   `listarAnotaciones()` ya sin la borrada.** Un dato metido por error que
+   ya influyó en `UA`/`factorCapacidad` seguiría distorsionándolos hasta
+   la siguiente anotación real si no se recalculara aquí también — borrar
+   un dato erróneo es, en el fondo, la misma operación de "corregir el
+   histórico" que ya justifica la recalibración automática, solo que
+   quitando una fila en vez de añadiéndola. `historico.js` importa
+   `construirFilasRegresion`/`recalibrar` (ya usados por dashboard.js) y
+   `guardarParametrosPiso` para persistir el resultado si pasa las guardas
+   de seguridad ya existentes (sistema degenerado / fuera de rango físico
+   → no se toca nada).
+
+3. **La lista de anotaciones (más reciente primero, con botón de
+   papelera) vive en `historico.js`, no en el dashboard — es la pantalla
+   de consulta del histórico completo (spec.md §6.4), coherente con dónde
+   ya vive la gráfica predicho/real.** Se muestra siempre que haya al
+   menos una anotación, incluso con 0 o 1 (el estado "todavía no hay
+   anotaciones suficientes" de la gráfica) — para poder borrar una
+   anotación solitaria o accidental aunque todavía no haya suficientes
+   para dibujar nada. `montarHistorico` pasó de un montaje de un solo
+   disparo a un `render()` interno reutilizable (mismo patrón que
+   `dashboard.js`), llamado de nuevo tras cada borrado para reflejar la
+   lista/gráfica/parámetros ya actualizados sin recargar la página.
+
+4. **Confirmación con `window.confirm()` nativo, no un modal propio.**
+   Un borrado es irreversible (sin backend con el que deshacerlo, spec.md
+   §7) y poco frecuente — el diálogo nativo del navegador ya transmite esa
+   gravedad sin necesidad de construir ni estilizar un componente de
+   confirmación nuevo para una acción que se espera usar rara vez.
+
+5. **`iconoBorrar()` nuevo en `iconos.js` (papelera, mismo trazo
+   `currentColor` que el resto) y `.boton-borrar` en `estilo.css` con
+   `--error` en vez del acento habitual — bug de especificidad CSS
+   evitado a propósito, no encontrado por accidente.** Ya había un caso
+   idéntico documentado (Fase 6, rediseño de interfaz móvil: la regla
+   genérica `button[type='button']` ganaba sobre `.control-estado` por
+   tener más especificidad) — aquí `button.boton-borrar` iguala la
+   especificidad de `button.boton-icono` (elemento+clase en ambas) a
+   propósito, y se declaró DESPUÉS de `button.boton-icono` en el archivo
+   para que sus valores (tamaño más pequeño, color `--error`) ganen el
+   desempate por orden — comprobado visualmente con captura, no solo
+   razonado.
+
+6. **Verificación:** 4 casos de prueba nuevos en `test/persistencia.test.js`
+   (borra por id conservando el resto en orden; id inexistente no cambia
+   nada; invalida el predicho/regresores de la anotación siguiente;
+   borrar la última anotación no invalida nada al no haber siguiente) — 16
+   casos OK en ese fichero, sin romper ninguno de los 12 ya existentes.
+   `npm run build` sin errores. Verificación funcional con un script ad-hoc
+   de Playwright (no committeado): sembradas 3 anotaciones sintéticas,
+   clic en la papelera de la del medio, diálogo `confirm` interceptado y
+   aceptado, comprobado que `localStorage` queda con las 2 restantes y que
+   la tercera (la que era "siguiente" de la borrada) pierde su
+   `predicho`/`avgConduccion`/`avgSolarVent` — sin errores de consola.
+   Verificación visual con `scripts/captura-historico.mjs` en viewport de
+   móvil: la nueva tarjeta "Anotaciones" aparece con las 10 anotaciones
+   sintéticas, más reciente primero, cada una con su papelera.

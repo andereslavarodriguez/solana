@@ -122,6 +122,16 @@ export function iconoViento() {
   `);
 }
 
+export function iconoBorrar() {
+  return base(`
+    <line x1="4" y1="7" x2="20" y2="7"/>
+    <path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7"/>
+    <path d="M6 7l1 12.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5L18 7"/>
+    <line x1="10" y1="11" x2="10" y2="16"/>
+    <line x1="14" y1="11" x2="14" y2="16"/>
+  `);
+}
+
 export function iconoLluvia() {
   return base(`
     <path d="M7 13a4 4 0 0 1 .9-7.9A5.5 5.5 0 0 1 18.5 8.5 3.5 3.5 0 0 1 18 15H7Z"/>

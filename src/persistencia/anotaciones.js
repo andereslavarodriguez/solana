@@ -43,3 +43,31 @@ export function listarAnotaciones(storage) {
   const guardado = storage.getItem(CLAVE);
   return guardado ? JSON.parse(guardado) : [];
 }
+
+// Borra una anotación por id (p.ej. un dato metido por error). La siguiente
+// anotación cronológica, si la había, guardaba predicho/avgConduccion/
+// avgSolarVent calculados por el gemelo en vivo para el intervalo que
+// arrancaba justo en la anotación borrada (Fase 7) — al desaparecer esa
+// anotación, el hueco real hasta la anterior superviviente es distinto (más
+// largo) del que esos regresores describen, así que dejan de ser
+// coherentes con el nuevo hueco y se invalidan a null en vez de dejarlos
+// apuntando a un intervalo que ya no existe. `construirFilasRegresion`
+// (recalibracion.js) ya ignora las filas sin regresores, así que
+// invalidarlas basta para que no contaminen ni el histórico ni la
+// recalibración.
+export function borrarAnotacion(storage, id) {
+  const anotaciones = listarAnotaciones(storage);
+  const idx = anotaciones.findIndex((a) => a.id === id);
+  if (idx === -1) return anotaciones;
+
+  const restantes = anotaciones.filter((a) => a.id !== id);
+
+  const siguiente = anotaciones[idx + 1];
+  if (siguiente && siguiente.predicho !== null) {
+    const pos = restantes.findIndex((a) => a.id === siguiente.id);
+    restantes[pos] = { ...siguiente, predicho: null, avgConduccion: null, avgSolarVent: null };
+  }
+
+  storage.setItem(CLAVE, JSON.stringify(restantes));
+  return restantes;
+}

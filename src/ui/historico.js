@@ -1,31 +1,69 @@
 // Pantalla de histórico (Fase 7, spec.md §6.4): predicho vs. real por
 // anotación, con los puntos etiquetados marcados distinto y excluidos del
-// error medio. Solo lectura — la recalibración en sí (src/model/
-// recalibracion.js) ya corre automáticamente desde dashboard.js al anotar
-// una temperatura no etiquetada (decisión anotada en docs/estado.md), no
-// hay ningún botón aquí para forzarla.
+// error medio. Sin ningún botón para forzar una recalibración a mano — la
+// automática (src/model/recalibracion.js) ya corre sola desde
+// dashboard.js al anotar una temperatura no etiquetada (decisión anotada
+// en docs/estado.md). La única escritura que ocurre desde esta pantalla es
+// borrar una anotación (docs/estado.md, "Borrado de anotaciones del
+// histórico") — que también dispara esa misma recalibración automática,
+// no un mecanismo nuevo.
 
 import { Chart } from 'chart.js/auto';
-import { listarAnotaciones } from '../persistencia/anotaciones.js';
-import { cargarParametrosPiso } from '../persistencia/piso.js';
-import { VENTANA_RECALIBRACION } from '../model/recalibracion.js';
+import { listarAnotaciones, borrarAnotacion } from '../persistencia/anotaciones.js';
+import { cargarParametrosPiso, guardarParametrosPiso } from '../persistencia/piso.js';
+import { construirFilasRegresion, recalibrar, VENTANA_RECALIBRACION } from '../model/recalibracion.js';
 import { insertarNavInferior } from './navInferior.js';
+import { iconoBorrar } from './iconos.js';
 
 export function montarHistorico(root, storage) {
-  const anotaciones = listarAnotaciones(storage);
-  const piso = cargarParametrosPiso(storage);
+  function render() {
+    const anotaciones = listarAnotaciones(storage);
+    const piso = cargarParametrosPiso(storage);
 
-  root.innerHTML = plantilla(anotaciones, piso);
-  insertarNavInferior('historico');
+    root.innerHTML = plantilla(anotaciones, piso);
+    insertarNavInferior('historico');
 
-  const canvas = root.querySelector('#grafica-historico');
-  if (canvas) dibujarGrafica(canvas, anotaciones);
+    const canvas = root.querySelector('#grafica-historico');
+    if (canvas) dibujarGrafica(canvas, anotaciones);
 
-  // Sin ningún fetch de por medio (todo sale de localStorage), la pantalla
-  // ya está en su estado final nada más renderizar — mismo contrato
-  // `[data-cargado="true"]` que dashboard.js/main-escena3d.js para que un
-  // script de verificación visual no dependa de un timeout fijo.
-  root.dataset.cargado = 'true';
+    root.querySelectorAll('[data-borrar-id]').forEach((boton) => {
+      boton.addEventListener('click', () => manejarBorrado(boton.dataset.borrarId));
+    });
+
+    // Sin ningún fetch de por medio (todo sale de localStorage), la
+    // pantalla ya está en su estado final nada más renderizar — mismo
+    // contrato `[data-cargado="true"]` que dashboard.js/main-escena3d.js
+    // para que un script de verificación visual no dependa de un timeout
+    // fijo.
+    root.dataset.cargado = 'true';
+  }
+
+  // Borrar una anotación (p.ej. un dato metido por error) es, en esencia,
+  // corregir el histórico — así que se recalibra igual que al anotar una
+  // temperatura nueva no etiquetada (dashboard.js), reconstruyendo las
+  // filas desde cero con las anotaciones que quedan. Sin esto, un dato
+  // erróneo ya borrado seguiría influyendo en UA/factorCapacidad hasta la
+  // siguiente anotación real.
+  function manejarBorrado(id) {
+    // eslint-disable-next-line no-alert -- confirmación mínima antes de un borrado irreversible, sin backend con el que deshacerlo
+    if (!window.confirm('¿Borrar esta anotación? No se puede deshacer.')) return;
+
+    borrarAnotacion(storage, id);
+
+    const anotaciones = listarAnotaciones(storage);
+    const piso = cargarParametrosPiso(storage);
+    const filas = construirFilasRegresion(anotaciones);
+    const resultado = recalibrar(filas, piso);
+    if (resultado) {
+      piso.UA = resultado.UA;
+      piso.factorCapacidad = resultado.factorCapacidad;
+      guardarParametrosPiso(storage, piso);
+    }
+
+    render();
+  }
+
+  render();
 }
 
 function formatoFecha(timestamp) {
@@ -59,6 +97,45 @@ function cabecera() {
   `;
 }
 
+// Lista de anotaciones con botón de borrado, más reciente primero — para
+// poder corregir un dato metido por error (p.ej. un despiste al anotar).
+// Se muestra siempre que haya al menos una anotación, independientemente
+// de si ya hay gráfica (que necesita al menos 2) o no.
+function listaAnotaciones(anotaciones) {
+  if (!anotaciones.length) return '';
+
+  const filas = [...anotaciones]
+    .reverse()
+    .map(
+      (a) => `
+        <li class="fila-anotacion">
+          <span class="fila-anotacion-fecha">${formatoFecha(a.timestamp)}</span>
+          <span class="fila-anotacion-temp">${a.temperatura}°</span>
+          ${
+            a.etiquetas && a.etiquetas.length
+              ? `<span class="fila-anotacion-etiquetas">${a.etiquetas.join(', ')}</span>`
+              : ''
+          }
+          <button type="button" class="boton-icono boton-borrar" data-borrar-id="${a.id}" aria-label="Borrar esta anotación">
+            ${iconoBorrar()}
+          </button>
+        </li>
+      `,
+    )
+    .join('');
+
+  return `
+    <section class="tarjeta">
+      <h2>Anotaciones</h2>
+      <p class="nota">
+        Si te equivocaste al anotar, bórrala aquí — el histórico y la
+        recalibración se recalculan sin ella.
+      </p>
+      <ul class="lista-anotaciones">${filas}</ul>
+    </section>
+  `;
+}
+
 function plantilla(anotaciones, piso) {
   if (anotaciones.length < 2) {
     return `
@@ -72,6 +149,7 @@ function plantilla(anotaciones, piso) {
           anterior.
         </p>
       </section>
+      ${listaAnotaciones(anotaciones)}
     `;
   }
 
@@ -113,6 +191,8 @@ function plantilla(anotaciones, piso) {
         <div><dt>Factor de capacidad</dt><dd>${piso.factorCapacidad.toFixed(2)}</dd></div>
       </dl>
     </section>
+
+    ${listaAnotaciones(anotaciones)}
   `;
 }
 

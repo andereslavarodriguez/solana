@@ -288,6 +288,42 @@ button[type='button']:hover {
   font-size: 0.85rem;
 }
 
+.lista-anotaciones {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fila-anotacion {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.fila-anotacion:last-child {
+  border-bottom: none;
+}
+
+.fila-anotacion-fecha {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  flex: 1;
+}
+
+.fila-anotacion-temp {
+  font-family: var(--tipo-titular);
+  font-size: 1.1rem;
+}
+
+.fila-anotacion-etiquetas {
+  color: var(--aviso);
+  font-size: 0.8rem;
+}
+
 .proximo-cambio {
   color: var(--texto-suave);
   font-size: 0.85rem;
@@ -350,6 +386,28 @@ button.boton-icono:hover {
   background: var(--acento);
   color: #fff;
   border-color: var(--acento);
+}
+
+/* Misma especificidad que button.boton-icono (elemento+clase) — declarada
+   después en el archivo a propósito, para que las medidas/color de aquí
+   ganen sobre las genéricas del icono en vez de al revés. */
+button.boton-borrar {
+  width: 2rem;
+  height: 2rem;
+  color: var(--error);
+  border-color: var(--borde);
+  flex: 0 0 auto;
+}
+
+button.boton-borrar svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+button.boton-borrar:hover {
+  background: var(--error);
+  color: #fff;
+  border-color: var(--error);
 }
 
 .fila-clima {

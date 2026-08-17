@@ -8,7 +8,11 @@ import {
   guardarParametrosPiso,
   cargarParametrosPiso,
 } from '../src/persistencia/piso.js';
-import { guardarAnotacion, listarAnotaciones } from '../src/persistencia/anotaciones.js';
+import {
+  guardarAnotacion,
+  listarAnotaciones,
+  borrarAnotacion,
+} from '../src/persistencia/anotaciones.js';
 import { guardarGemelo, cargarGemelo } from '../src/persistencia/gemelo.js';
 import { estadoGemeloInicial } from '../src/model/gemelo.js';
 
@@ -113,6 +117,73 @@ caso('con predicho/regresores (Fase 7) -> se guardan y se recuperan tal cual', (
   assert.equal(lista[0].predicho, 21.8);
   assert.equal(lista[0].avgConduccion, -3.2);
   assert.equal(lista[0].avgSolarVent, 45.6);
+});
+
+caso('borrarAnotacion: quita la anotación con ese id, conserva el resto en orden', () => {
+  const storage = storageFalso();
+  const a1 = guardarAnotacion(storage, { temperatura: 21 });
+  const a2 = guardarAnotacion(storage, { temperatura: 22 });
+  const a3 = guardarAnotacion(storage, { temperatura: 23 });
+
+  borrarAnotacion(storage, a2.id);
+
+  const lista = listarAnotaciones(storage);
+  assert.equal(lista.length, 2);
+  assert.deepEqual(
+    lista.map((a) => a.id),
+    [a1.id, a3.id],
+  );
+});
+
+caso('borrarAnotacion: id que no existe -> no cambia nada', () => {
+  const storage = storageFalso();
+  guardarAnotacion(storage, { temperatura: 21 });
+  borrarAnotacion(storage, 'no-existe');
+  assert.equal(listarAnotaciones(storage).length, 1);
+});
+
+caso('borrarAnotacion: invalida el predicho/regresores de la siguiente anotación (Fase 7), ya no describen el hueco real', () => {
+  const storage = storageFalso();
+  const a1 = guardarAnotacion(storage, { temperatura: 21 });
+  const a2 = guardarAnotacion(storage, {
+    temperatura: 22,
+    predicho: 21.8,
+    avgConduccion: -1.5,
+    avgSolarVent: 10,
+  });
+  guardarAnotacion(storage, {
+    temperatura: 23,
+    predicho: 22.1,
+    avgConduccion: -1.2,
+    avgSolarVent: 5,
+  });
+
+  borrarAnotacion(storage, a1.id);
+
+  const lista = listarAnotaciones(storage);
+  const a2Restante = lista.find((a) => a.id === a2.id);
+  assert.equal(a2Restante.predicho, null);
+  assert.equal(a2Restante.avgConduccion, null);
+  assert.equal(a2Restante.avgSolarVent, null);
+  // La tercera anotación no estaba justo después de la borrada -> no se toca.
+  assert.equal(lista[1].predicho, 22.1);
+});
+
+caso('borrarAnotacion: borrar la última anotación no invalida nada (no hay siguiente)', () => {
+  const storage = storageFalso();
+  guardarAnotacion(storage, { temperatura: 21 });
+  const a2 = guardarAnotacion(storage, {
+    temperatura: 22,
+    predicho: 21.8,
+    avgConduccion: -1.5,
+    avgSolarVent: 10,
+  });
+
+  borrarAnotacion(storage, a2.id);
+
+  const lista = listarAnotaciones(storage);
+  assert.equal(lista.length, 1);
+  assert.equal(lista[0].predicho, null); // no tocado, ya era null desde el principio
 });
 
 console.log('\n--- gemelo en vivo (Fase 7) ---');
