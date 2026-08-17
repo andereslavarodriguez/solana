@@ -9,12 +9,14 @@ import { Chart } from 'chart.js/auto';
 import { listarAnotaciones } from '../persistencia/anotaciones.js';
 import { cargarParametrosPiso } from '../persistencia/piso.js';
 import { VENTANA_RECALIBRACION } from '../model/recalibracion.js';
+import { insertarNavInferior } from './navInferior.js';
 
 export function montarHistorico(root, storage) {
   const anotaciones = listarAnotaciones(storage);
   const piso = cargarParametrosPiso(storage);
 
   root.innerHTML = plantilla(anotaciones, piso);
+  insertarNavInferior('historico');
 
   const canvas = root.querySelector('#grafica-historico');
   if (canvas) dibujarGrafica(canvas, anotaciones);
@@ -53,10 +55,6 @@ function cabecera() {
   return `
     <header class="cabecera">
       <h1>Histórico</h1>
-      <nav>
-        <a href="index.html">← Panel</a>
-        <a href="parametros.html">Parámetros</a>
-      </nav>
     </header>
   `;
 }

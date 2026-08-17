@@ -1,4 +1,5 @@
-// Pantalla principal (Fase 5, spec.md §6.2). Capa de DOM: orquesta datos
+// Pantalla "Inicio" (Fase 5, spec.md §6.2 — rediseñada como pantalla de
+// controles compacta, ver docs/estado.md). Capa de DOM: orquesta datos
 // reales (Fase 2), persistencia (Fase 3/4/5) y el motor de recomendación
 // puro (Fase 1), sin modificar ninguno de esos módulos.
 //
@@ -18,12 +19,25 @@ import { estadoGemeloInicial, pasoGemelo, regresoresPromedio } from '../model/ge
 import { construirFilasRegresion, recalibrar } from '../model/recalibracion.js';
 import { estadoAntiguedad, horasDesde, formatoAntiguedad } from './antiguedadAnotacion.js';
 import { validarCampoNumerico, RANGOS } from './validacion.js';
+import { etiquetaCompass } from './etiquetaVentana.js';
+import {
+  iconoActualizar,
+  iconoMas,
+  iconoTermometro,
+  iconoGota,
+  iconoViento,
+  iconoLluvia,
+  iconoVentanaAbierta,
+  iconoVentanaCerrada,
+  iconoPersianaSubida,
+  iconoPersianaBajada,
+} from './iconos.js';
 
 const INTERVALO_REFRESCO_MS = 15 * 60 * 1000;
 const ETIQUETAS = [
   { id: 'cocinando', texto: 'Cocinando' },
-  { id: 'climatizacion', texto: 'Calefacción/AC encendido' },
-  { id: 'masGente', texto: 'Más gente de lo normal' },
+  { id: 'climatizacion', texto: 'Calefacción/AC' },
+  { id: 'masGente', texto: 'Más gente' },
 ];
 
 export function montarDashboard(root, storage) {
@@ -33,6 +47,11 @@ export function montarDashboard(root, storage) {
 
   let estadoClima = 'cargando'; // 'cargando' | 'ok' | 'error'
   let datosClima = null;
+  // Formulario de anotación colapsado por defecto: pedido explícito de una
+  // pantalla compacta que quepa sin deslizar — el número de un vistazo ya
+  // está en la fila de "Interior", el formulario completo solo hace falta
+  // al tocar el botón "+".
+  let mostrarFormAnotacion = false;
 
   function anotacionMasReciente() {
     const anotaciones = listarAnotaciones(storage);
@@ -110,23 +129,18 @@ export function montarDashboard(root, storage) {
       datosClima,
       ultimaAnotacion: anotacionMasReciente(),
       recomendacionInfo: calcularRecomendaciones(),
+      mostrarFormAnotacion,
     });
     conectarEventos();
     root.dataset.cargado = estadoClima === 'cargando' ? 'false' : 'true';
   }
 
   function conectarEventos() {
-    root.querySelectorAll('.toggle-abierta').forEach((input) => {
-      input.addEventListener('change', () => {
-        estadoVentanas[input.dataset.ventana].abierta = input.checked;
-        guardarEstadoVentanas(storage, estadoVentanas);
-        render();
-      });
-    });
-
-    root.querySelectorAll('.toggle-persiana').forEach((input) => {
-      input.addEventListener('change', () => {
-        estadoVentanas[input.dataset.ventana].persianaArriba = input.checked;
+    root.querySelectorAll('.control-estado').forEach((boton) => {
+      boton.addEventListener('click', () => {
+        const nombreVentana = boton.dataset.ventana;
+        const campo = boton.dataset.campo;
+        estadoVentanas[nombreVentana][campo] = !estadoVentanas[nombreVentana][campo];
         guardarEstadoVentanas(storage, estadoVentanas);
         render();
       });
@@ -135,12 +149,21 @@ export function montarDashboard(root, storage) {
     const btnActualizar = root.querySelector('#btn-actualizar');
     if (btnActualizar) btnActualizar.addEventListener('click', actualizarClima);
 
+    const btnAbrirForm = root.querySelector('#btn-abrir-form-anotacion');
+    if (btnAbrirForm) {
+      btnAbrirForm.addEventListener('click', () => {
+        mostrarFormAnotacion = !mostrarFormAnotacion;
+        render();
+      });
+    }
+
     const formAnotacion = root.querySelector('#form-anotacion');
     if (formAnotacion) {
       formAnotacion.addEventListener('submit', (evento) => {
         evento.preventDefault();
         manejarAnotacion(formAnotacion);
       });
+      formAnotacion.querySelector('input[type="number"]')?.focus();
     }
   }
 
@@ -191,6 +214,7 @@ export function montarDashboard(root, storage) {
       }
     }
 
+    mostrarFormAnotacion = false;
     render();
   }
 
@@ -198,137 +222,156 @@ export function montarDashboard(root, storage) {
   setInterval(actualizarClima, INTERVALO_REFRESCO_MS);
 }
 
-function plantilla({ piso, estadoVentanas, estadoClima, datosClima, ultimaAnotacion, recomendacionInfo }) {
+function plantilla({
+  piso,
+  estadoVentanas,
+  estadoClima,
+  datosClima,
+  ultimaAnotacion,
+  recomendacionInfo,
+  mostrarFormAnotacion,
+}) {
   return `
-    <header class="cabecera">
+    <header class="cabecera-compacta">
       <h1>Solana</h1>
-      <nav>
-        <a href="historico.html">Histórico</a>
-        <a href="parametros.html">Parámetros</a>
-      </nav>
+      <button type="button" id="btn-actualizar" class="boton-icono" aria-label="Actualizar clima">
+        ${iconoActualizar()}
+      </button>
     </header>
 
-    ${tarjetaClima(estadoClima, datosClima)}
-    ${tarjetaAnotacion(ultimaAnotacion)}
+    ${filaClima(estadoClima, datosClima)}
+    ${filaInterior(ultimaAnotacion, mostrarFormAnotacion)}
 
-    <section class="tarjetas-ventanas">
-      ${piso.ventanas.map((v) => tarjetaVentana(v, estadoVentanas[v.nombre], recomendacionInfo)).join('')}
+    <section class="tarjetas-ventanas-compactas">
+      ${piso.ventanas
+        .map((v) => tarjetaVentana(v, estadoVentanas[v.nombre], recomendacionInfo))
+        .join('')}
     </section>
   `;
 }
 
-function tarjetaClima(estadoClima, datosClima) {
+function filaClima(estadoClima, datosClima) {
   if (estadoClima === 'cargando') {
-    return `
-      <section class="tarjeta tarjeta-clima">
-        <h2>Clima ahora</h2>
-        <p class="cargando">Cargando clima en vivo…</p>
-      </section>
-    `;
+    return `<section class="fila-clima cargando">Cargando clima…</section>`;
   }
 
   if (estadoClima === 'error') {
     return `
-      <section class="tarjeta tarjeta-clima tarjeta-error">
-        <h2>Clima ahora</h2>
-        <p>No se pudo obtener el clima en vivo. Comprueba tu conexión.</p>
-        <button type="button" id="btn-actualizar">Reintentar</button>
+      <section class="fila-clima fila-clima-error">
+        Sin clima en vivo — comprueba tu conexión.
       </section>
     `;
   }
 
   const { actual } = datosClima;
   return `
-    <section class="tarjeta tarjeta-clima">
-      <h2>Clima ahora</h2>
-      <dl class="datos-clima">
-        <div><dt>Temperatura</dt><dd>${actual.tOut.toFixed(1)} °C</dd></div>
-        <div><dt>Humedad</dt><dd>${Math.round(actual.humedad)}%</dd></div>
-        <div><dt>Viento</dt><dd>${actual.viento.toFixed(1)} km/h</dd></div>
-        <div><dt>Lluvia</dt><dd>${actual.precipitacion.toFixed(1)} mm</dd></div>
-      </dl>
-      <button type="button" id="btn-actualizar">Actualizar</button>
+    <section class="fila-clima">
+      <span class="dato-clima">${iconoTermometro()}${actual.tOut.toFixed(1)}°</span>
+      <span class="dato-clima">${iconoGota()}${Math.round(actual.humedad)}%</span>
+      <span class="dato-clima">${iconoViento()}${Math.round(actual.viento)}km/h</span>
+      <span class="dato-clima">${iconoLluvia()}${actual.precipitacion.toFixed(1)}mm</span>
     </section>
   `;
 }
 
-function tarjetaAnotacion(ultimaAnotacion) {
+function filaInterior(ultimaAnotacion, mostrarFormAnotacion) {
   const resumen = ultimaAnotacion
-    ? `<p>Última anotación: <strong>${ultimaAnotacion.temperatura} °C</strong> (${formatoAntiguedad(horasDesde(ultimaAnotacion.timestamp))})</p>`
-    : '<p>Todavía no has anotado ninguna temperatura interior.</p>';
+    ? `<strong>${ultimaAnotacion.temperatura}°</strong><span class="texto-suave-compacto">${formatoAntiguedad(horasDesde(ultimaAnotacion.timestamp))}</span>`
+    : `<span class="texto-suave-compacto">Sin anotar todavía</span>`;
 
   return `
-    <section class="tarjeta tarjeta-anotacion">
-      <h2>Temperatura interior</h2>
-      ${resumen}
-      <form id="form-anotacion" novalidate>
-        <div class="campo">
-          <label for="temperatura">Nueva anotación (°C)</label>
-          <input
-            type="number"
-            id="temperatura"
-            name="temperatura"
-            step="0.1"
-            min="${RANGOS.temperaturaInterior.min}"
-            max="${RANGOS.temperaturaInterior.max}"
-          />
-          <span class="error" id="temperatura-error"></span>
-        </div>
-        <fieldset class="etiquetas">
-          <legend>Factores externos (opcional)</legend>
-          ${ETIQUETAS.map((e) => `<label><input type="checkbox" name="${e.id}" /> ${e.texto}</label>`).join('')}
-        </fieldset>
-        <button type="submit">Anotar</button>
-      </form>
+    <section class="fila-interior">
+      <div class="fila-interior-resumen">
+        <span class="etiqueta-fila">Interior</span>
+        ${resumen}
+        <button type="button" id="btn-abrir-form-anotacion" class="boton-icono" aria-label="Anotar temperatura interior">
+          ${iconoMas()}
+        </button>
+      </div>
+      ${mostrarFormAnotacion ? formAnotacionHtml() : ''}
     </section>
+  `;
+}
+
+function formAnotacionHtml() {
+  return `
+    <form id="form-anotacion" class="form-anotacion-compacto" novalidate>
+      <div class="fila-form-anotacion">
+        <input
+          type="number"
+          id="temperatura"
+          name="temperatura"
+          step="0.1"
+          placeholder="°C"
+          min="${RANGOS.temperaturaInterior.min}"
+          max="${RANGOS.temperaturaInterior.max}"
+        />
+        <button type="submit">Anotar</button>
+      </div>
+      <span class="error" id="temperatura-error"></span>
+      <div class="chips-etiquetas">
+        ${ETIQUETAS.map((e) => `<label class="chip"><input type="checkbox" name="${e.id}" />${e.texto}</label>`).join('')}
+      </div>
+    </form>
   `;
 }
 
 function tarjetaVentana(ventana, estadoVentana, recomendacionInfo) {
+  const rec = recomendacionInfo.recomendaciones?.find((r) => r.nombre === ventana.nombre);
+
   return `
-    <section class="tarjeta tarjeta-ventana" data-ventana="${ventana.nombre}">
-      <h3>Ventana ${ventana.nombre}</h3>
-      <div class="estado-actual">
-        <label>
-          <input type="checkbox" class="toggle-abierta" data-ventana="${ventana.nombre}" ${estadoVentana.abierta ? 'checked' : ''} />
-          Ventana abierta
-        </label>
-        <label>
-          <input type="checkbox" class="toggle-persiana" data-ventana="${ventana.nombre}" ${estadoVentana.persianaArriba ? 'checked' : ''} />
-          Persiana subida
-        </label>
-      </div>
-      <div class="recomendacion">
-        ${recomendacionHtml(ventana.nombre, recomendacionInfo)}
+    <section class="tarjeta-ventana-compacta" data-ventana="${ventana.nombre}">
+      <h3>${etiquetaCompass(ventana.orientacion)}</h3>
+      ${recomendacionCompacta(ventana.nombre, recomendacionInfo, rec)}
+      <div class="fila-controles">
+        <button
+          type="button"
+          class="control-estado ${estadoVentana.abierta ? 'activo' : ''}"
+          data-ventana="${ventana.nombre}"
+          data-campo="abierta"
+        >
+          ${estadoVentana.abierta ? iconoVentanaAbierta() : iconoVentanaCerrada()}
+          <span>${estadoVentana.abierta ? 'Abierta' : 'Cerrada'}</span>
+        </button>
+        <button
+          type="button"
+          class="control-estado ${estadoVentana.persianaArriba ? 'activo' : ''}"
+          data-ventana="${ventana.nombre}"
+          data-campo="persianaArriba"
+        >
+          ${estadoVentana.persianaArriba ? iconoPersianaSubida() : iconoPersianaBajada()}
+          <span>${estadoVentana.persianaArriba ? 'Subida' : 'Bajada'}</span>
+        </button>
       </div>
     </section>
   `;
 }
 
-function recomendacionHtml(nombreVentana, info) {
+function recomendacionCompacta(nombreVentana, info, rec) {
   if (info.estado === 'cargando') {
-    return '<p class="recomendacion-vacia">Cargando clima para calcular la recomendación…</p>';
+    return '<p class="recomendacion-vacia">Cargando…</p>';
   }
   if (info.estado === 'error') {
-    return '<p class="recomendacion-vacia">No se pudo calcular: no hay clima en vivo disponible.</p>';
+    return '<p class="recomendacion-vacia">Sin clima en vivo.</p>';
   }
   if (info.estado === 'sin-anotacion') {
-    return '<p class="recomendacion-vacia">Anota la temperatura interior para ver recomendaciones.</p>';
+    return '<p class="recomendacion-vacia">Anota la temperatura interior.</p>';
   }
   if (info.estado === 'caducada') {
-    return `<p class="recomendacion-vacia">Última anotación ${formatoAntiguedad(info.horas)} — anota una nueva para ver recomendaciones actualizadas.</p>`;
+    return `<p class="recomendacion-vacia">Anotación ${formatoAntiguedad(info.horas)} — anota otra.</p>`;
   }
 
-  const rec = info.recomendaciones.find((r) => r.nombre === nombreVentana);
-  const notaAntiguedad =
+  const iconoVentanaRec = rec.ventana.accion === 'abrir' ? iconoVentanaAbierta() : iconoVentanaCerrada();
+  const iconoPersianaRec = rec.persiana.accion === 'arriba' ? iconoPersianaSubida() : iconoPersianaBajada();
+  const avisoAntiguedad =
     info.estado === 'aviso'
-      ? `<p class="aviso-antiguedad">Basado en tu última anotación, ${formatoAntiguedad(info.horas)} — puede estar desactualizada.</p>`
-      : `<p class="nota-antiguedad">Basado en tu última anotación, ${formatoAntiguedad(info.horas)}.</p>`;
+      ? `<p class="aviso-antiguedad-compacto">Anotación ${formatoAntiguedad(info.horas)}, puede estar vieja.</p>`
+      : '';
 
   return `
-    ${notaAntiguedad}
-    <p><strong>Ventana:</strong> ${rec.ventana.accion === 'abrir' ? 'abrir' : 'cerrar'}${proximoCambioHtml(rec.ventana.proximoCambio)}</p>
-    <p><strong>Persiana:</strong> ${rec.persiana.accion === 'arriba' ? 'subir' : 'bajar'}${proximoCambioHtml(rec.persiana.proximoCambio)}</p>
+    <p class="recomendacion-linea">${iconoVentanaRec}${rec.ventana.accion === 'abrir' ? 'Abrir' : 'Cerrar'}${proximoCambioHtml(rec.ventana.proximoCambio)}</p>
+    <p class="recomendacion-linea">${iconoPersianaRec}${rec.persiana.accion === 'arriba' ? 'Subir' : 'Bajar'}${proximoCambioHtml(rec.persiana.proximoCambio)}</p>
+    ${avisoAntiguedad}
   `;
 }
 
@@ -339,7 +382,7 @@ function recomendacionHtml(nombreVentana, info) {
 function proximoCambioHtml(proximoCambio) {
   if (!proximoCambio) return '';
   const verbo = proximoCambio.accion === 'abrir' ? 'abrir' : proximoCambio.accion === 'arriba' ? 'subir' : proximoCambio.accion === 'cerrar' ? 'cerrar' : 'bajar';
-  return ` <span class="proximo-cambio">(y ${verbo} en ${formatoDuracionCorta(proximoCambio.minutos)})</span>`;
+  return ` <span class="proximo-cambio">(${verbo} en ${formatoDuracionCorta(proximoCambio.minutos)})</span>`;
 }
 
 function formatoDuracionCorta(minutos) {

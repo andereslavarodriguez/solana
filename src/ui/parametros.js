@@ -12,12 +12,15 @@
 import { cargarParametrosPiso, guardarParametrosPiso } from '../persistencia/piso.js';
 import { cargarUbicacion, guardarUbicacion } from '../persistencia/ubicacion.js';
 import { validarParametrosPiso, validarUbicacion, validarCampoNumerico, RANGOS } from './validacion.js';
+import { etiquetaCompass } from './etiquetaVentana.js';
+import { insertarNavInferior } from './navInferior.js';
 
 export function montarPantallaParametros(root, storage) {
   const piso = cargarParametrosPiso(storage);
   const ubicacion = cargarUbicacion(storage);
 
   root.innerHTML = plantilla(piso, ubicacion);
+  insertarNavInferior('parametros');
 
   const form = root.querySelector('#form-parametros');
 
@@ -42,7 +45,6 @@ function plantilla(piso, ubicacion) {
     <form id="form-parametros" novalidate>
       <header class="cabecera">
         <h1>Parámetros del piso</h1>
-        <nav><a href="index.html">← Volver al panel</a></nav>
       </header>
 
       <fieldset class="seccion seccion-fija">
@@ -90,7 +92,7 @@ function plantilla(piso, ubicacion) {
 
 function plantillaVentana(ventana, i) {
   return `
-    <h2>Ventana ${ventana.nombre}</h2>
+    <h2>Ventana ${ventana.nombre} — ${etiquetaCompass(ventana.orientacion)}</h2>
     <input type="hidden" id="ventana-${i}-nombre" name="ventana-${i}-nombre" value="${ventana.nombre}" />
     ${campoNumerico(`ventana-${i}-orientacion`, 'Orientación (°)', ventana.orientacion, RANGOS.ventanaOrientacion, '1')}
     ${campoNumerico(`ventana-${i}-ancho`, 'Ancho (m)', ventana.ancho, RANGOS.ventanaAncho, '0.05')}

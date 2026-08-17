@@ -1,9 +1,9 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-17 (rediseño del motor de recomendación —
-busca el mejor instante de cambio en vez de una decisión fija para todo el
-horizonte, y el modelo de ventilación ya tiene en cuenta la persiana y el
-viento real — ver "Correcciones post-lanzamiento" al final del documento)
+Última actualización: 2026-08-17 (rediseño de la interfaz para móvil:
+pestañas fijas abajo, "Inicio" compacto sin escena 3D ni scroll, botones
+interruptor en vez de checkboxes, ventanas identificadas por punto
+cardinal — ver "Rediseño de interfaz móvil" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3074,3 +3074,138 @@ bajarla, sin ningún caso en que la ventilación pudiera compensar.
    usuario esta vez) y sin un valor de referencia claro con el que
    modelarlo sin inventar un parámetro más a ciegas — si hace falta más
    adelante, se retoma con datos de uso real en vez de una suposición.
+
+### Rediseño de interfaz móvil (2026-08-17, misma tarde)
+
+El usuario probó la app instalada de verdad y dio el mismo veredicto que
+motivó el rediseño de estilo de la Fase 8 (decisión 12): "no me convence,
+es como de una página web... piensa la app para el móvil". Cinco quejas
+concretas: hay que deslizar hacia abajo para ver todo; hacen falta más
+botones; las pantallas están todas mezcladas en una sola página larga
+("diferentes feeds"); demasiado texto; "Ventana A"/"Ventana B" no dice
+nada (no sabe qué letra es qué ventana física); y marcar un cuadrado para
+el estado de ventana/persiana "no me gusta, piensa otra forma". Antes de
+tocar código se plantearon con el usuario (`AskUserQuestion`, con mockups
+ASCII) las dos decisiones de fondo que cambian la arquitectura: cómo
+resolver que la escena 3D (55vh) más el resto no cabía en una pantalla sin
+deslizar, y qué control sustituye al checkbox — resueltas como se detalla
+abajo.
+
+1. **Pestañas fijas abajo (Inicio / Casa / Histórico / Parámetros),
+   elegido explícitamente por el usuario entre tres opciones planteadas
+   (pestañas con escena compacta arriba; pantallas deslizables
+   horizontalmente tipo stories).** La app sigue siendo un sitio
+   multi-página sin router (decisión de la Fase 4, no reconsiderada): cada
+   pestaña es un `<a href>` a una página HTML real, no navegación en
+   cliente. `src/ui/navInferior.js` (`insertarNavInferior(activa)`)
+   construye la barra y la inserta en `document.body` — no dentro del
+   contenedor que cada página reescribe con `innerHTML` en cada render
+   (mismo motivo por el que la escena 3D vive en un hermano de `#app`
+   desde el checkpoint 24 de la Fase 6), para que un re-render del
+   dashboard no la destruya. Cada punto de entrada (`main.js`,
+   `main-casa.js`, `historico.js`, `parametros.js`) pasa su propio id de
+   pestaña activa de forma explícita en vez de intentar adivinarlo a
+   partir de `location.pathname` (que cambia de forma con `base:
+   '/solana/'` en producción frente a dev) — más simple y fiable.
+
+2. **La escena 3D se muda a una pestaña propia (`casa.html` +
+   `src/ui/main-casa.js`), a pantalla completa — deja de vivir como hero
+   de 55vh dentro de Inicio.** Reutiliza `montarEscena3D`
+   (`src/ui/escena3dDashboard.js`, checkpoint 24 de la Fase 6) tal cual,
+   sin duplicar la lógica de datos reales/fallback. Sigue siendo el
+   "elemento central" de la app (spec.md §6.1) — solo que ahora se ve
+   entera en su propia pestaña, en vez de recortada dentro de un hero que
+   competía por espacio con los controles. `vite.config.js` gana una
+   quinta entrada de build (`casa`); `globPatterns` de la PWA ya la
+   precachea sin cambios (patrón genérico `**/*.html`).
+
+3. **Inicio (`index.html`, `#app-compacto`) pasa a ser una pantalla solo de
+   controles, rediseñada para caber en una pantalla de móvil sin deslizar:
+   clima en una fila compacta de icono+valor, temperatura interior +
+   botón "+" que despliega un formulario de anotación compacto (colapsado
+   por defecto), y dos tarjetas de ventana con controles interruptor.**
+   Verificado con Playwright en viewport 393×852 (`document.documentElement
+   .scrollHeight <= clientHeight`) tanto en el estado normal como con el
+   formulario de anotación desplegado — cabe sin deslizar en ambos casos.
+   No se fuerza `overflow: hidden` en ningún sitio: si un móvil más
+   pequeño o un estado con más contenido no cupiera, el contenido haría
+   scroll en vez de recortarse — "no deslizar" es el diseño objetivo para
+   el caso normal, no una prohibición dura que arriesgue esconder
+   funcionalidad real. Histórico y Parámetros NO se tocaron en este
+   sentido — siguen siendo pantallas de consulta/edición ocasional con
+   scroll normal (decisión ya tomada en la Fase 5), solo ganan la barra de
+   pestañas y pierden los enlaces de texto cruzados que tenían en la
+   cabecera.
+
+4. **Botón interruptor único (icono + color, tocar invierte el estado)
+   sustituye al checkbox de "Ventana abierta"/"Persiana subida" — elegido
+   explícitamente por el usuario entre tres opciones (par de botones
+   Abrir/Cerrar; deslizador tipo iOS).** `.control-estado`/`.activo` en
+   `estilo.css`: fondo/color de acento cuando está activo (abierta /
+   subida), blanco con texto atenuado cuando no. Icono nuevo por estado en
+   `src/ui/iconos.js` (`iconoVentanaAbierta`/`Cerrada`,
+   `iconoPersianaSubida`/`Bajada`) — mismo criterio que los iconos de la
+   PWA (Fase 8, decisión 7): SVG generado a mano, sin librería externa.
+   **Bug de especificidad CSS real, encontrado antes de verificar
+   visualmente (no en producción):** la regla genérica preexistente
+   `button[type='button']` (Fase 4/5, botón "Actualizar"/"Reintentar")
+   tiene más especificidad que una clase sola (`.control-estado`) porque
+   añade un selector de elemento sobre el mismo nivel de
+   clase/atributo — así que sus `padding`/`border`/`background`
+   ganaban pese a estar declarados antes en el archivo. Arreglado
+   calificando los selectores nuevos con el elemento
+   (`button.boton-icono`, `button.control-estado`,
+   `button.control-estado.activo`) para igualar esa especificidad y que
+   el orden de declaración (más tarde en el archivo) decida, en vez de
+   depender de casualidad. Comprobado con un script de Playwright ad-hoc
+   (no committeado) que `getComputedStyle` da el `border-radius`/
+   `background` esperados, y visualmente en las capturas.
+
+5. **Ventanas identificadas por punto cardinal derivado de
+   `ventana.orientacion` (`src/ui/etiquetaVentana.js`,
+   `etiquetaCompass()`), no por un apodo guardado aparte.** Una sola
+   fuente de verdad (la orientación real, ya editable en Parámetros desde
+   la Fase 4) — no puede quedar desincronizada de la geometría real si se
+   corrige. Decisión no obvia sobre el redondeo: bins de 45° que arrancan
+   en el propio grado de cada dirección (`floor(orientacion/45)`), NO
+   bins centrados en cada dirección (`round(orientacion/45)`) — con bins
+   centrados, las dos orientaciones reales de este piso (248°/68°,
+   spec.md §3.4) caen justo al otro lado del límite (a 22°/23° de
+   distancia de sus dos vecinos, prácticamente empatadas) y salen
+   "Oeste"/"Este" en vez de "Suroeste"/"Noreste" — el nombre que el
+   propio spec.md ya usa para ellas, presumiblemente porque el autor
+   original las redondeó de forma coloquial, no bin a bin. Con bins que
+   arrancan en el grado exacto de cada dirección, las dos orientaciones
+   reales caen exactamente donde ya se esperaba, verificado con un caso
+   de prueba que lo comprueba explícitamente contra
+   `PARAMETROS_PISO_POR_DEFECTO` (`test/etiquetaVentana.test.js`, 8 casos,
+   integrado en `npm test`). La etiqueta se usa en el título de cada
+   tarjeta de Inicio y, además, junto a "Ventana A"/"Ventana B" en los
+   encabezados de la pantalla de Parámetros (para que el usuario pueda
+   relacionar la letra con el punto cardinal mientras edita los grados a
+   mano) — el `nombre` interno ('A'/'B') no cambia, sigue siendo la clave
+   real usada por `estadoVentanas`/`recomendacion.js`.
+
+6. **Menos texto: recomendaciones reducidas a icono + verbo corto (p.ej.
+   "🗔 Abrir (cerrar en 2h)"), sin la frase "Basado en tu última anotación,
+   hace X" repetida en cada tarjeta — ese dato ya está una sola vez en la
+   fila "Interior" de arriba.** El aviso de antigüedad (3h-12h, Fase 5)
+   solo se muestra dentro de la tarjeta de ventana cuando de verdad aplica
+   (estado 'aviso'), no como nota siempre visible. Etiquetas de anotación
+   (cocinando/climatización/más gente) pasan de checkboxes en lista
+   vertical a chips en una fila que envuelve (`.chip`), mismo patrón
+   visual que ya usan otras apps para selección múltiple compacta.
+
+7. **Verificación:** `npm test` (122 casos, incluidos los 8 nuevos de
+   `etiquetaVentana.test.js`) y `npm run build` sin errores ni avisos
+   nuevos. Visual con `scripts/captura-pantalla.mjs` en viewport de móvil
+   (393×852) para las 4 páginas reales (`index.html`, `casa.html`,
+   `historico.html`, `parametros.html`) sin errores de consola en
+   ninguna. Un aparente bug en la primera captura de Parámetros (la barra
+   de pestañas parecía aparecer a mitad de página, no fija abajo) resultó
+   ser un artefacto conocido de las capturas `fullPage: true` de
+   Playwright con elementos `position: fixed` (se "congelan" en la
+   composición apilada) — descartado como bug real comprobando
+   `getBoundingClientRect()` antes/después de hacer scroll (se mantiene
+   pegada a `clientHeight` en ambos casos) y con una captura de viewport
+   normal (no `fullPage`), donde se ve fija abajo como se espera.

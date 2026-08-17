@@ -240,10 +240,6 @@ button[type='submit']:hover {
   margin-top: 0;
 }
 
-.tarjeta-error {
-  border-color: var(--error);
-}
-
 .cargando {
   color: var(--texto-suave);
 }
@@ -281,58 +277,6 @@ button[type='button']:hover {
   color: #fff;
 }
 
-.etiquetas {
-  border: none;
-  padding: 0;
-  margin: 0.75rem 0;
-}
-
-.etiquetas legend {
-  color: var(--texto-suave);
-  font-size: 0.85rem;
-  padding: 0;
-}
-
-.etiquetas label {
-  display: block;
-  margin: 0.35rem 0;
-}
-
-.etiquetas input {
-  margin-right: 0.4rem;
-}
-
-.tarjetas-ventanas {
-  display: grid;
-  gap: 1.25rem;
-}
-
-@media (min-width: 40rem) {
-  .tarjetas-ventanas {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-.estado-actual {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin: 0.75rem 0 1rem;
-}
-
-.estado-actual label {
-  color: var(--texto);
-  font-size: 0.95rem;
-}
-
-.estado-actual input {
-  margin-right: 0.5rem;
-}
-
-.recomendacion p {
-  margin: 0.4rem 0;
-}
-
 .recomendacion-vacia {
   color: var(--texto-suave);
   font-style: italic;
@@ -349,12 +293,244 @@ button[type='button']:hover {
   font-weight: normal;
 }
 
-.aviso-antiguedad {
+/* Inicio compacto (rediseño móvil, ver docs/estado.md): pantalla de solo
+   controles, pensada para caber entera sin deslizar en un móvil — la
+   escena 3D se mudó a su propia pestaña (casa.html) precisamente para
+   liberar ese espacio. `#app-compacto` reemplaza a `#app` solo en
+   index.html; el resto de páginas siguen siendo pantallas de consulta
+   ocasional con scroll normal (decisión ya tomada en la Fase 5). */
+#app-compacto {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: 0.9rem 0.9rem calc(4.6rem + env(safe-area-inset-bottom, 0));
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-height: 100dvh;
+}
+
+.cabecera-compacta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cabecera-compacta h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+/* `button.boton-icono` (no solo `.boton-icono`): la regla genérica
+   `button[type='button']` de más arriba tiene la misma especificidad de
+   selector de clase/atributo (1) pero además un selector de elemento (1)
+   que un simple `.boton-icono` no tiene — sin igualar esa especificidad,
+   el padding/border-radius/background de aquí perdería contra la regla
+   genérica pese a estar declarada después en el archivo. */
+button.boton-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 50%;
+  background: var(--papel);
+  color: var(--acento-oscuro);
+  cursor: pointer;
+}
+
+.boton-icono svg {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+button.boton-icono:hover {
+  background: var(--acento);
+  color: #fff;
+  border-color: var(--acento);
+}
+
+.fila-clima {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  border: 1px solid var(--borde);
+  border-radius: 0.2rem;
+  background: var(--papel);
+  padding: 0.7rem 0.9rem;
+}
+
+.fila-clima.cargando {
+  color: var(--texto-suave);
+}
+
+.fila-clima-error {
+  color: var(--error);
+}
+
+.dato-clima {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.95rem;
+}
+
+.dato-clima svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--texto-suave);
+}
+
+.fila-interior {
+  border: 1px solid var(--borde);
+  border-radius: 0.2rem;
+  background: var(--papel);
+  padding: 0.7rem 0.9rem;
+}
+
+.fila-interior-resumen {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.etiqueta-fila {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
+.fila-interior-resumen strong {
+  font-family: var(--tipo-titular);
+  font-size: 1.3rem;
+  flex: 0 0 auto;
+}
+
+.texto-suave-compacto {
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+  flex: 1;
+}
+
+.fila-interior-resumen .boton-icono {
+  margin-left: auto;
+}
+
+.form-anotacion-compacto {
+  margin-top: 0.7rem;
+}
+
+.fila-form-anotacion {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.fila-form-anotacion input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chips-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--borde);
+  border-radius: 1rem;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+
+.chip input {
+  margin: 0;
+}
+
+.tarjetas-ventanas-compactas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  flex: 1;
+}
+
+.tarjeta-ventana-compacta {
+  border: 1px solid var(--borde);
+  border-radius: 0.2rem;
+  background: var(--papel);
+  padding: 0.7rem 0.9rem;
+}
+
+.tarjeta-ventana-compacta h3 {
+  margin: 0 0 0.3rem;
+  font-family: var(--tipo-titular);
+  font-weight: 400;
+  font-size: 1.05rem;
+}
+
+.recomendacion-linea {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.2rem 0;
+  font-size: 0.9rem;
+}
+
+.recomendacion-linea svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--texto-suave);
+  flex-shrink: 0;
+}
+
+.aviso-antiguedad-compacto {
   color: var(--aviso);
   background: var(--aviso-fondo);
   border-radius: 0.15rem;
-  padding: 0.4rem 0.6rem;
-  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+}
+
+.fila-controles {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+/* Botón interruptor único (ventana/persiana) — sustituye al checkbox de
+   "Ventana abierta"/"Persiana subida", pedido explícito del usuario
+   ("marcar un cuadrado no me gusta, piensa otra forma"). Icono y color
+   cambian con el estado; tocarlo lo invierte. */
+button.control-estado {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  border: 1px solid var(--borde);
+  border-radius: 0.2rem;
+  background: #fff;
+  color: var(--texto-suave);
+  padding: 0.5rem 0.4rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.control-estado svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+button.control-estado.activo {
+  border-color: var(--acento);
+  background: var(--acento);
+  color: #fff;
 }
 
 /* Panel de depuración de escena3d.html (Fase 6, checkpoint 4): solo para
@@ -408,4 +584,52 @@ button[type='button']:hover {
   background: none;
   color: var(--texto-suave);
   border: 1px solid var(--borde);
+}
+
+/* Navegación inferior (rediseño móvil, ver docs/estado.md): pestañas fijas
+   compartidas por las 4 páginas reales, estilo app nativa en vez de
+   enlaces de texto sueltos en la cabecera. */
+.nav-inferior {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  background: var(--papel);
+  border-top: 1px solid var(--borde);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.nav-inferior-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.5rem 0 0.4rem;
+  color: var(--texto-suave);
+  text-decoration: none;
+  font-size: 0.7rem;
+  letter-spacing: 0.01em;
+}
+
+.nav-inferior-icono {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.nav-inferior-icono svg {
+  width: 100%;
+  height: 100%;
+}
+
+.nav-inferior-item.activo {
+  color: var(--acento-oscuro);
+}
+
+/* Todas las páginas dejan hueco abajo para no quedar tapadas por la barra
+   fija; #app-compacto (Inicio) gestiona su propia altura aparte. */
+body:has(.nav-inferior) #app:not(#app-compacto) {
+  padding-bottom: calc(4.2rem + env(safe-area-inset-bottom, 0));
 }

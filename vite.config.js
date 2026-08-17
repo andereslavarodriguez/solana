@@ -14,6 +14,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
+        casa: resolve(__dirname, 'casa.html'),
         parametros: resolve(__dirname, 'parametros.html'),
         escena3d: resolve(__dirname, 'escena3d.html'),
         historico: resolve(__dirname, 'historico.html'),
