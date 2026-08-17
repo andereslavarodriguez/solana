@@ -23,7 +23,7 @@
 
 import * as THREE from 'three';
 import { calcularGeometria } from './geometria.js';
-import { direccionSol, factorIntensidadSol } from './iluminacion.js';
+import { direccionSol, factorIntensidadSol, factorDifusionNubes } from './iluminacion.js';
 import { esTormenta } from '../data/openMeteo.js';
 
 // Paleta aclarada tras feedback ("demasiado oscuro, más cálido y chill") —
@@ -495,7 +495,11 @@ function construirNubes(nubesPct, objetivo, radio, aspecto) {
   const alturaMin = objetivo.y + radio * 1.15;
   const alturaMax = objetivo.y + radio * techoCielo(aspecto);
   const textura = texturaNube();
-  const opacidadBase = 0.55 + 0.4 * intensidad;
+  // 0.55-0.95 (checkpoints 5-6) se leía demasiado tenue — pedido explícito
+  // ("haz que las nubes se vean más") junto con la corrección de que ya no
+  // oscurecen tanto la escena: si van a aportar menos sombra a la luz, que
+  // al menos se noten más ellas mismas como objeto.
+  const opacidadBase = 0.72 + 0.28 * intensidad;
   // Con pocos cúmulos (nubosidad baja) cada uno es más pequeño — "una nube
   // pequeña" pedido explícito, no el mismo tamaño repetido con menos
   // opacidad.
@@ -2166,12 +2170,14 @@ function construirLuzSol(sol, objetivo, radio) {
   // sigue habiendo algo de bias (no 0) para no reintroducir el acné que
   // motivó tenerlo en primer lugar.
   luz.shadow.normalBias = 0.004;
-  // 3 (checkpoint 5) se pidió entonces para suavizar un borde muy duro —
-  // pedido explícito ahora en la dirección contraria ("las sombras se ven
-  // borrosas en el contorno"). Bajado a un valor que sigue sin ser un
-  // borde 100% duro (evita "shadow acne" en el borde) pero mucho más
-  // definido.
-  luz.shadow.radius = 1;
+  // 1 (checkpoint 12-21) era un contorno bastante definido, pedido
+  // explícito entonces. Ahora se difumina más cuanto más nublado está
+  // (`factorDifusionNubes`, iluminacion.js): con mucha nube el sol deja de
+  // ser una fuente puntual y se dispersa por todo el cielo — "las nubes
+  // actúan como focos" propios, así que la sombra se vuelve mucho más
+  // suave en vez de solo más tenue. Con cielo despejado (difusión 0) sigue
+  // siendo el mismo contorno definido de siempre.
+  luz.shadow.radius = 1 + 6 * factorDifusionNubes(sol.nubesPct);
   // Sin esto, los cambios de near/far/left/right/top/bottom de arriba no
   // se aplican nunca: Three.js no recalcula la matriz de proyección de la
   // cámara de sombra por su cuenta, hay que pedirlo explícitamente. Este
@@ -2603,7 +2609,21 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
   // arreglo de la normal del suelo) se note claramente y no quede diluida
   // por un relleno ambiental demasiado fuerte (pedido explícito: sombra
   // más marcada). Intensidad interpolada día↔noche (checkpoint 5).
-  const intensidadAmbiental = AMBIENTAL_DIA + (AMBIENTAL_NOCHE - AMBIENTAL_DIA) * nocturnidadActual;
+  //
+  // AMBIENTAL_NUBES_EXTRA (pedido explícito: "las nubes actúan como
+  // focos... que no oscurezca tanto, pero las sombras sean más difusas"):
+  // de día, con cielo cubierto se añade algo de ambiental extra, como si
+  // el cielo entero (no solo el sol) se convirtiera en una fuente de luz
+  // dispersa — junto con la sombra más difusa de `construirLuzSol`, es la
+  // misma idea física en dos sitios (menos luz puntual, más luz repartida)
+  // en vez de solo apagar la escena entera. Solo de día (`1-nocturnidad`):
+  // de noche la nubosidad ya se nota en el cielo/sombra, no hace falta que
+  // también compita con el contraste cálido de la farola.
+  const AMBIENTAL_NUBES_EXTRA = 0.16;
+  const intensidadAmbiental =
+    AMBIENTAL_DIA +
+    (AMBIENTAL_NOCHE - AMBIENTAL_DIA) * nocturnidadActual +
+    AMBIENTAL_NUBES_EXTRA * factorDifusionNubes(sol.nubesPct) * (1 - nocturnidadActual);
   const luzAmbiental = new THREE.AmbientLight(0xfff3e0, intensidadAmbiental);
   scene.add(luzAmbiental);
   scene.add(construirLuzSol(sol, objetivo, radio));

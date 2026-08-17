@@ -3,9 +3,7 @@
 // compara con un cálculo hecho a mano.
 
 import assert from 'node:assert/strict';
-import { direccionSol, factorIntensidadSol } from '../src/escena3d/iluminacion.js';
-import { iProxy } from '../src/model/irradiancia.js';
-import { I_MAX } from '../src/model/constantes.js';
+import { direccionSol, factorIntensidadSol, factorDifusionNubes } from '../src/escena3d/iluminacion.js';
 
 let ok = 0;
 function caso(nombre, fn) {
@@ -57,17 +55,33 @@ caso('sol en el cénit sin nubes -> factor 1 (I_MAX exacto)', () => {
   assert.ok(cerca(factor, 1));
 });
 
-caso('reutiliza iProxy real, no una curva propia', () => {
-  const sol = { elevacion: 35, azimut: 200, nubesPct: 40 };
-  const esperado = Math.min(1, iProxy(sol.elevacion, sol.nubesPct) / I_MAX);
-  assert.ok(cerca(factorIntensidadSol(sol), esperado));
-});
-
 caso('más nubes -> menor factor, para la misma elevación', () => {
   const sol = { elevacion: 35, azimut: 200 };
   const factorClaro = factorIntensidadSol({ ...sol, nubesPct: 0 });
   const factorNublado = factorIntensidadSol({ ...sol, nubesPct: 80 });
   assert.ok(factorNublado < factorClaro);
+});
+
+caso('cielo cubierto ya no equivale a "sin sol": el factor no baja de un suelo alto', () => {
+  const sol = { elevacion: 35, azimut: 200, nubesPct: 100 };
+  // sin(35°)≈0.574 × suelo de nubes de la escena (0.55) ≈ 0.315 — muy por
+  // encima del extremo casi-negro que daba la curva térmica antigua
+  // (sin(35°)×0.2 ≈ 0.115).
+  assert.ok(factorIntensidadSol(sol) > 0.3);
+});
+
+console.log('\n--- factorDifusionNubes ---');
+
+caso('cielo despejado -> difusión 0', () => {
+  assert.equal(factorDifusionNubes(0), 0);
+});
+
+caso('cielo totalmente cubierto -> difusión 1', () => {
+  assert.equal(factorDifusionNubes(100), 1);
+});
+
+caso('más nubes -> más difusión, de forma monótona', () => {
+  assert.ok(factorDifusionNubes(80) > factorDifusionNubes(40));
 });
 
 console.log(`\n${ok} casos OK (iluminacion.js)\n`);

@@ -9,9 +9,6 @@
 // térmico quedan atadas a la misma posición solar sin ninguna conversión
 // aparte.
 
-import { iProxy } from '../model/irradiancia.js';
-import { I_MAX } from '../model/constantes.js';
-
 const DEG2RAD = Math.PI / 180;
 
 export function direccionSol(sol) {
@@ -24,10 +21,43 @@ export function direccionSol(sol) {
   };
 }
 
-// Reutiliza iProxy (irradiancia.js), la misma función que ya modula
-// Q_solar en el modelo térmico — así la escena no se oscurece/aclara con
-// una curva distinta a la que usa la física real. Bajo el horizonte, 0.
+// Suelo de nubosidad PROPIO de la escena, distinto del FACTOR_NUBES_MINIMO
+// del modelo térmico (0.2, constantes.js) — decisión deliberada, no un
+// descuido. Hasta ahora esta función reutilizaba literalmente iProxy/I_MAX
+// (la misma curva que Q_solar) "para que la escena no se oscurezca con una
+// curva distinta a la física real" — pero pedido explícito del usuario tras
+// verlo en vivo: con mucha nube la escena se apagaba demasiado. La física
+// del modelo térmico (Fase 1/4) sigue intacta, sin tocar — esto es
+// puramente la curva que decide cuánta luz DIRECCIONAL dibuja la escena 3D,
+// que ya venía tomándose licencias estéticas sin más base física en otros
+// sitios (emissive de la isla, HemisphereLight nocturna, etc. — ver
+// docs/estado.md, Fase 6). Con un suelo más alto, un cielo cubierto sigue
+// dejando la escena razonablemente iluminada.
+const FACTOR_NUBES_MINIMO_ESCENA = 0.55;
+
+function factorNubosidadEscena(nubesPct) {
+  const f = 1 - ((1 - FACTOR_NUBES_MINIMO_ESCENA) * nubesPct) / 100;
+  return Math.max(FACTOR_NUBES_MINIMO_ESCENA, Math.min(1, f));
+}
+
+// Intensidad de la luz solar DIRECCIONAL de la escena — día/noche por
+// elevación (0 bajo el horizonte, hasta 1 en el cénit) modulada por la
+// curva de nubosidad más suave de arriba. Sigue habiendo menos luz con más
+// nubes (no se pierde el efecto), pero mucho menos agresivo que la curva
+// térmica real.
 export function factorIntensidadSol(sol) {
   if (sol.elevacion <= 0) return 0;
-  return Math.min(1, iProxy(sol.elevacion, sol.nubesPct) / I_MAX);
+  const senElev = Math.max(0, Math.sin(sol.elevacion * DEG2RAD));
+  return Math.min(1, senElev * factorNubosidadEscena(sol.nubesPct));
+}
+
+// Cuánto de "encapotado" está el cielo, 0 (despejado) a 1 (100% nubes) —
+// independiente de la elevación solar (a diferencia de factorIntensidadSol,
+// que sí depende de si es de día). Se usa para difuminar la sombra: con
+// mucha nube el sol deja de ser una única fuente puntual y pasa a
+// dispersarse por todo el cielo — las nubes "actúan como focos" propios,
+// así que el contorno de la sombra se vuelve mucho más suave en vez de
+// seguir siendo un borde duro con menos luz.
+export function factorDifusionNubes(nubesPct) {
+  return Math.max(0, Math.min(1, nubesPct / 100));
 }

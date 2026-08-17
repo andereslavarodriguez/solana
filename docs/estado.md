@@ -1,8 +1,8 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-17 (se puede borrar una anotación del
-histórico — ver "Borrado de anotaciones del histórico" al final del
-documento)
+Última actualización: 2026-08-17 (la nubosidad ya no oscurece tanto la
+escena 3D, las sombras se difuminan en su lugar — ver "Nubes: menos
+oscurecimiento, sombras más difusas" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3600,3 +3600,79 @@ ella para siempre en el histórico y en la recalibración automática.
    Verificación visual con `scripts/captura-historico.mjs` en viewport de
    móvil: la nueva tarjeta "Anotaciones" aparece con las 10 anotaciones
    sintéticas, más reciente primero, cada una con su papelera.
+
+### Nubes: menos oscurecimiento, sombras más difusas (2026-08-17)
+
+Pedido explícito del usuario tras ver la escena en vivo: "cuando hay nubes
+afecta demasiado a la luz... lo que tienes que hacer para no perder el
+efecto nubes es que siga habiendo luz, pero las sombras sean más difusas
+— cuando hay nubes todas las nubes actúan como focos y por tanto las
+sombras se borran. haz que las nubes se vean más". Diagnóstico: la
+escena reutilizaba literalmente `iProxy`/`I_MAX` (la misma curva de
+`Q_solar` del modelo térmico, con su suelo de nubosidad de 0.2 —
+corrección de esa misma tarde) para la intensidad de la luz
+`DirectionalLight` — decisión original de la Fase 6 (checkpoint 3, "así
+la escena no se oscurece con una curva distinta a la física real"),
+correcta para no inventar dos físicas distintas pero equivocada para el
+objetivo estético: con 100% de nubes y sol ya bajo, la escena se quedaba
+casi negra aunque el modelo térmico (con razón, para el cálculo de
+`Q_solar`) siguiera considerando que entraba algo de luz.
+
+1. **`factorIntensidadSol` (`src/escena3d/iluminacion.js`) deja de
+   importar `iProxy`/`I_MAX` del modelo térmico — pasa a tener su propia
+   curva de nubosidad, más suave, solo para la escena.** Nueva constante
+   local `FACTOR_NUBES_MINIMO_ESCENA = 0.55` (frente al `0.2` del modelo
+   térmico, `constantes.js`) — deliberadamente distinta, no un
+   descuido: el modelo térmico sigue intacto (no se ha tocado
+   `irradiancia.js` ni ningún test de `model.test.js`), esto es
+   puramente una licencia estética de la escena 3D, coherente con otras
+   ya tomadas antes sin base física exacta (emissive de la isla,
+   `HemisphereLight` nocturna — ver checkpoints anteriores). El test que
+   verificaba "reutiliza iProxy real, no una curva propia"
+   (`test/escena3d-iluminacion.test.js`, Fase 6 checkpoint 3) se
+   sustituyó por uno que verifica lo contrario a propósito: con 100% de
+   nubes, el factor se queda bastante por encima de lo que daría la
+   curva térmica antigua.
+
+2. **`factorDifusionNubes(nubesPct)`, función nueva — 0 (despejado) a 1
+   (cielo cubierto), independiente de la elevación solar.** Se usa en
+   dos sitios para materializar la idea del usuario ("las nubes actúan
+   como focos"): sustituye una única fuente de luz puntual/direccional
+   por luz repartida, que es literalmente lo que hace un cielo
+   nublado real (dispersa la luz del sol por todo el domo del cielo).
+   - `luz.shadow.radius` (`construirLuzSol`) pasa de un valor fijo (1,
+     contorno bastante definido, checkpoint 12/21) a
+     `1 + 6 × factorDifusionNubes(nubesPct)` — con cielo despejado el
+     contorno sigue siendo el mismo de siempre; con cielo cubierto la
+     sombra se desdibuja mucho, coherente con "las sombras se borran"
+     pedido explícitamente.
+   - Nueva constante `AMBIENTAL_NUBES_EXTRA = 0.16`: la luz ambiental
+     (`AmbientLight`) sube con la nubosidad, solo de día
+     (`(1-nocturnidadActual)` — de noche ya se nota en el cielo/farola,
+     no hace falta competir con su contraste cálido). Compensa
+     directamente que la luz direccional ya no se apaga tanto sin dejar
+     la escena sin contraste: el efecto combinado es "sigue habiendo
+     luz" (menos oscurecimiento total) con sombras mucho más suaves, en
+     vez de solo apagar la escena entera.
+
+3. **Nubes (los propios sprites) más visibles — `opacidadBase` de
+   `0.55-0.95` (checkpoints 5-6) a `0.72-1.0`.** Pedido explícito ("haz
+   que las nubes se vean más"): si van a aportar menos oscurecimiento a
+   la luz de la escena, que al menos se noten más como objeto visual —
+   mismo patrón de dos tonos/sombra propia ya existente (checkpoint 5),
+   sin tocar geometría ni cantidad de cúmulos (`numeroCumulos`, ya
+   escalaba con `nubesPct` desde el checkpoint 6).
+
+4. **Verificación:** `test/escena3d-iluminacion.test.js` reescrito (11
+   casos OK, 3 nuevos para `factorDifusionNubes` y uno reemplazado),
+   resto de `npm test` sin cambios (no se tocó ningún módulo de
+   `src/model`). `npm run build` sin errores. Visual con
+   `scripts/captura-escena3d.mjs` comparando `debugNubes=0` vs.
+   `debugNubes=100` a la misma hora (mediodía): con nubes, la sombra del
+   árbol pasa de un óvalo bien definido a una mancha muy difuminada,
+   mientras la escena en conjunto sigue razonablemente iluminada (no se
+   oscurece de golpe); con `debugNubes=60` en un viewport más alto (para
+   que las nubes no quedaran tapadas por el panel de depuración) se
+   confirmó que los cúmulos se ven claramente más opacos/blancos que
+   antes. Verificado también contra `casa.html` con clima real (fetch en
+   vivo), sin errores de consola.
