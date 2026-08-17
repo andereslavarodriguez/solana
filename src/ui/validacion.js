@@ -15,6 +15,7 @@ export const RANGOS = {
   factorCapacidad: { min: 1, max: 20 },
   SHGC: { min: 0, max: 1 },
   renovacionesHora: { min: 0, max: 20 },
+  fraccionVentPersianaBajada: { min: 0, max: 1 },
   bandaConfortMin: { min: 10, max: 30 },
   bandaConfortMax: { min: 10, max: 30 },
   ventanaOrientacion: { min: 0, max: 360 },
@@ -55,6 +56,12 @@ export function validarParametrosPiso(datos) {
   validarCampo(errores, 'factorCapacidad', datos.factorCapacidad, RANGOS.factorCapacidad);
   validarCampo(errores, 'SHGC', datos.SHGC, RANGOS.SHGC);
   validarCampo(errores, 'renovacionesHora', datos.renovacionesHora, RANGOS.renovacionesHora);
+  validarCampo(
+    errores,
+    'fraccionVentPersianaBajada',
+    datos.fraccionVentPersianaBajada,
+    RANGOS.fraccionVentPersianaBajada,
+  );
   validarCampo(errores, 'bandaConfort.min', datos.bandaConfort?.min, RANGOS.bandaConfortMin);
   validarCampo(errores, 'bandaConfort.max', datos.bandaConfort?.max, RANGOS.bandaConfortMax);
 

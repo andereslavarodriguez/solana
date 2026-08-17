@@ -1,8 +1,9 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-16 (corrección de dos bugs reales en el motor
-de recomendación — ventana/persiana daban avisos absurdos de noche, ver
-"Correcciones post-lanzamiento" al final del documento)
+Última actualización: 2026-08-17 (rediseño del motor de recomendación —
+busca el mejor instante de cambio en vez de una decisión fija para todo el
+horizonte, y el modelo de ventilación ya tiene en cuenta la persiana y el
+viento real — ver "Correcciones post-lanzamiento" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -12,7 +13,7 @@ tenga sus tests/verificación pasando y esté commiteada.
 
 - **Fase 1 — Modelo puro.** Modelo térmico RC, sombra por ventana y motor de
   recomendación implementados como funciones puras en `src/model/` (sin APIs
-  reales, sin persistencia, sin interfaz). 28 casos de prueba manuales en
+  reales, sin persistencia, sin interfaz). 33 casos de prueba manuales en
   `test/model.test.js`, verificables a ojo (imprimen valores intermedios) y
   con `assert`. Ejecutar con `npm test`.
 - **Fase 2 — Datos reales.** Capa de datos en `src/data/` (`ubicacion.js`,
@@ -2857,3 +2858,219 @@ otro por persiana:
    `sombra.js`, `irradiancia.js`) no cambió — el problema estaba
    íntegramente en cómo `recomendacion.js` interpretaba las trayectorias
    simuladas, no en la física del modelo en sí.
+
+### Rediseño del motor de recomendación + modelo de ventilación (2026-08-17)
+
+El usuario, tras la corrección del día anterior, cuestionó la lógica de
+fondo: el motor seguía comparando "estado fijo para las 6-8h enteras del
+horizonte" contra el otro estado fijo — pero abrir/cerrar una ventana no es
+una decisión que se tome de un tirón para toda la noche, se puede volver a
+tocar en cualquier momento (y de hecho el dashboard recalcula la
+recomendación sola cada 15 min, Fase 5). Propuso además calcular la hora
+óptima de cambio en vez de un simple abrir/cerrar, y señaló un hueco físico
+real: el modelo de ventilación no distinguía persiana arriba/abajo ni usaba
+el viento real (ya disponible de Open-Meteo, sin usar en el modelo térmico).
+Se plantearon las cuatro mejoras al usuario antes de tocar código
+(`AskUserQuestion`) y se implementaron las cuatro.
+
+1. **`recomendarVentana`/`recomendarPersiana` reescritas: buscan el mejor
+   INSTANTE DE CAMBIO en vez de comparar dos estados fijos para todo el
+   horizonte.** Nueva función `mejorEstrategiaUnCambio()` en
+   `recomendacion.js`: para cada estado de partida candidato (ambos para
+   ventana — no se asume que el estado físico actual sea el punto de
+   partida óptimo, igual que el diseño original tampoco lo asumía;
+   solo `arriba` para persiana, ver punto 2), prueba TODOS los instantes de
+   cambio posibles (`trayectoriaConCambio()`: estado inicial hasta el paso
+   k, el contrario desde ahí) y se queda con el que menos distancia
+   acumulada a la banda de confort produce. El resultado ya no es solo
+   "abrir"/"cerrar": incluye `proximoCambio` (`{ accion, pasos, minutos }`,
+   o `null` si no conviene cambiar dentro del horizonte) — el dashboard
+   ahora puede decir "abrir (y cerrar en 2.5h)" en vez de una única decisión
+   sin fecha. Esto también volvió innecesario, y se eliminó, el caso
+   especial "indiferente" que se había añadido el día anterior a
+   `recomendarPersiana` (sin sol, cualquier instante de cambio da
+   exactamente la misma trayectoria — el propio empate ya lo resuelve el
+   sesgo de "no cambiar si no hay beneficio claro").
+
+2. **Persiana: el punto de partida de la búsqueda sigue siendo siempre
+   "arriba" (no el estado físico real), a propósito — asimetría deliberada
+   respecto a la ventana.** A diferencia de la ventana (donde no hay un
+   estado "por defecto" preferible), la persiana sí tiene uno ya establecido
+   desde la Fase 1 (decisión 5: sin motivo para tenerla bajada si no hace
+   falta) — mantenerlo evita reintroducir el mismo problema que costó
+   arreglar el día anterior (si el punto de partida fuera "lo que hay
+   ahora", con la persiana físicamente bajada por la razón que sea, la
+   búsqueda podría recomendar "bajar" solo por inercia del estado actual,
+   no porque haga falta).
+
+3. **Se necesitó reintroducir la ponderación exponencial del horizonte
+   (`DECAY_PASO`, `VIDA_MEDIA_PASOS=1.5` — 22.5 min) — el rediseño la había
+   quitado al principio dando por hecho que buscar el instante de cambio
+   bastaba, y un caso de prueba real demostró que no.** Con distancia SIN
+   ponderar, un escenario con sol muy fuerte y sostenido (`elevacion=40°`
+   fija, como en el test ya existente "T_in ya por encima de 25°C ahora
+   mismo -> bajar") hacía que la búsqueda AGRAVARA el problema en vez de
+   arreglarlo ya: la trayectoria "persiana arriba" en ese test no dejaba de
+   calentarse en ningún momento del horizonte (la ganancia solar de una
+   ventana suelo-a-techo a mediodía superaba la pérdida por conducción
+   incluso con el exterior helando) — así que retrasar el cambio "escondía"
+   parte de la posterior bajada de temperatura fuera del horizonte visible,
+   dando una distancia acumulada menor cuanto más tarde se bajaba la
+   persiana, aunque bajarla YA fuera estrictamente mejor en cada instante
+   individual (Q_solar nunca puede ser negativo — decisión 8, Fase 1). Es
+   el problema clásico de optimizar sobre un horizonte finito sin ningún
+   descuento temporal: sin él, el optimizador puede aplazar indefinidamente
+   una mala consecuencia con tal de empujarla fuera de la ventana evaluada.
+   `VIDA_MEDIA_PASOS=1.5` se afinó a mano verificando ese caso (necesita
+   vida media ≤1.5 pasos para recomendar bajar YA, no en ~1h) y
+   comprobando que seguía sin romper el caso real que motivó todo esto el
+   día anterior (T_in muy por encima de la banda, T_out más fresco pero
+   bajando el resto de la noche -> sigue recomendando abrir). Efecto
+   secundario aceptado conscientemente: con una vida media tan corta, el
+   "próximo cambio" casi nunca anticipa más de 1-2h vista — se decidió que
+   es un buen trade-off porque coincide con la premisa que motivó todo el
+   rediseño (no es una decisión inamovible, la app la vuelve a calcular
+   sola cada 15 min).
+
+4. **`MEJORA_MINIMA=0.01`, guarda nueva para que la ponderación exponencial
+   no fabrique un "próximo cambio" de puro ruido numérico.** Con el
+   horizonte tan ponderado hacia el corto plazo, una diferencia a 6-8h
+   vista pesa casi nada pero no es exactamente cero — verificado con el
+   caso real que motivó la corrección del día anterior (26°C dentro, 22°C
+   fuera bajando toda la noche): antes de esta guarda, la búsqueda
+   recomendaba "abrir (y cerrar en 30 min)" por una diferencia de ~0.0005
+   entre cerrar pronto y no cerrar nunca — indistinguible del ruido, pero
+   igualmente "ganadora" al ser estrictamente menor. Un candidato solo
+   sustituye al mejor hasta ahora si mejora por más de `MEJORA_MINIMA` —
+   verificado que ese mismo caso ya no propone ningún cambio futuro
+   (`proximoCambio: null`) tras la guarda, mientras que los casos donde sí
+   hay una diferencia real (~0.1 o más en los escenarios probados) siguen
+   proponiendo un cambio con normalidad. Valor elegido a ojo, con margen de
+   sobra entre el ruido observado (~0.0005) y una diferencia real
+   (~0.1) — pendiente de ajustar con uso real.
+
+5. **`termico.js`: `qVentVentana` ahora depende de la persiana, con un
+   parámetro nuevo `fraccionVentPersianaBajada` (0.15 por defecto).** Antes
+   el caudal de ventilación de una ventana abierta era el mismo estuviera
+   la persiana como estuviera — con la persiana bajada, una persiana
+   enrollable normal deja pasar bastante menos aire, no el mismo caudal.
+   `renovacionesHora` pasa a ser el caudal "persiana arriba"; con la
+   persiana abajo se multiplica por esta nueva fracción. Nuevo parámetro
+   editable en "Parámetros del modelo" (`parametros.js`,
+   `validacion.js` con rango 0-1, igual que SHGC) — 0.15 elegido a ojo, sin
+   base empírica todavía.
+
+6. **`termico.js`: `qVentVentana` también escala con el viento real
+   (`factorViento`), dato que ya se pedía a Open-Meteo (`wind_speed_10m`,
+   desde la Fase 6 checkpoint 6) pero nunca llegaba al modelo térmico —
+   solo se usaba en la escena 3D.** Con más viento entra más aire por una
+   ventana abierta que en calma; `factorViento(v) = min(1 + v/15, 3)`
+   (km/h), o sea caudal nominal en calma, hasta triplicado con viento
+   fuerte. Simplificación deliberada: solo la VELOCIDAD del viento, no su
+   dirección relativa a la fachada (barlovento/sotavento) — matiz real
+   pero un parámetro más sin base empírica clara, fuera de alcance de esta
+   mejora. `V_REF_VIENTO_KMH=15`/`FACTOR_VIENTO_MAX=3` elegidos a ojo,
+   pendientes de ajustar con uso real. Sin dato de viento (tests,
+   simulaciones que no lo pasan) el factor es 1 — no se asume ni calma ni
+   viento, compatibilidad hacia atrás sin tocar ningún test existente.
+
+7. **Datos reales: el viento pasa a ir también en cada punto del
+   pronóstico (`adaptador.js`), no solo en `actual`.** `wind_speed_10m` ya
+   se pedía a `minutely_15` completo desde la Fase 6 checkpoint 6, pero
+   `puntoModelo()` solo lo exponía para el instante presente — ahora cada
+   punto de `pronostico` lleva su propio `viento`, para que
+   `simularHorizonte()` pueda escalar la ventilación con el viento
+   PREVISTO en cada paso, no solo con el viento actual repetido. El gemelo
+   en vivo (`gemelo.js`, Fase 7) también se actualizó para pasar
+   `actual.viento` tanto a `simularHorizonte` como a `qVentTotal` — mismo
+   criterio de consistencia física en todos los sitios que simulan.
+
+8. **Verificación:** 5 casos de prueba manuales nuevos en
+   `test/model.test.js` (persiana reduce el caudal proporcionalmente al
+   nuevo parámetro, viento real lo escala, sin dato de viento se comporta
+   igual que antes, y un caso de `proximoCambio` real para ventana y para
+   persiana cada uno) — 33 casos OK en total del fichero, y 118 en todo
+   `npm test`, sin romper ningún test ya existente (incluidos los 4 casos
+   de `recomendarVentana`/`recomendarPersiana` de la Fase 1 y los 2 de la
+   corrección del día anterior). Verificación visual con Playwright: el
+   dashboard renderiza bien el nuevo inciso "(y bajar en 2.5h)" con datos
+   reales (captura manual, no committeada), la pantalla de parámetros
+   muestra y guarda correctamente el campo nuevo
+   (`fraccionVentPersianaBajada`), y ninguna de las dos genera errores de
+   consola.
+
+### Persiana y ventana acopladas de verdad (2026-08-17, misma tarde)
+
+El usuario probó la app en caliente (literalmente: anotó 32°C, mediodía de
+agosto) y encontró un problema real en la interacción entre las dos mejoras
+del mismo día: la app recomendaba abrir ambas ventanas Y bajar ambas
+persianas — "al menos una podria estar abierta para que entre aire". Tenía
+razón: `recomendarPersiana` seguía simulando con el estado FÍSICO ACTUAL de
+`abierta` (normalmente cerrada, hasta que el usuario actúa sobre la propia
+recomendación), nunca con el estado que `recomendarVentana` acababa de
+recomendar — así que, desde que `qVentVentana` depende de la persiana
+(mejora de esa misma mañana, ver más arriba), la búsqueda de la persiana
+NUNCA veía el beneficio de ventilación de tenerla subida con la ventana
+abierta, solo el coste de la ganancia solar. Sesgada sistemáticamente hacia
+bajarla, sin ningún caso en que la ventilación pudiera compensar.
+
+1. **`recomendarPersiana` calcula primero el horario de `recomendarVentana`
+   para la MISMA ventana, y lo usa como estado fijo de `abierta` en su
+   propia búsqueda — no el estado físico actual.** Nueva función interna
+   `calcularMejorVentana()` (compartida por las dos funciones exportadas,
+   antes duplicada como el cuerpo de `recomendarVentana`). Acoplo en un
+   solo sentido (ventana → persiana), no bidireccional: `recomendarVentana`
+   sigue asumiendo el estado ACTUAL de la persiana propia (una
+   simplificación razonable y ya razonada — si en realidad la persiana
+   también termina subiendo, la ventilación real solo sería MEJOR que la
+   modelada, nunca peor, así que no invalida la recomendación de abrir,
+   como mucho la hace conservadora). Ida y vuelta completa (persiana
+   también influyendo en el cálculo de ventana con un punto fijo iterado)
+   se descartó por complejidad no justificada por el problema real
+   encontrado — decidir primero la ventana (la palanca más "grande":
+   afecta a térmica Y seguridad/ruido) y ajustar la persiana después con
+   ese dato ya resuelve el caso reportado.
+
+2. **Nueva función `trayectoriaConCambios()` (plural), generaliza la
+   anterior `trayectoriaConCambio()` (que se elimina) para simular DOS
+   campos cambiando de forma independiente en la misma ventana — el que se
+   está buscando (`persianaArriba`) y uno ya decidido de antemano
+   (`abierta`, con su propio instante de cambio ya fijado por
+   `calcularMejorVentana`).** Trocea el horizonte en los puntos de cambio
+   de ambos campos (hasta 3 tramos) y encadena `simularHorizonte()` por
+   tramo, igual que ya hacía la versión de un solo campo pero generalizado
+   a una lista de cambios en vez de uno solo. `mejorEstrategiaUnCambio()`
+   gana un parámetro opcional `fondo` (cambios fijos adicionales, vacío por
+   defecto) — sin usarlo, el comportamiento de `recomendarVentana` no
+   cambia en nada.
+
+3. **Verificado con datos reales del piso (mediodía de agosto, T_out real
+   ~27.5°C subiendo a ~30°C por la tarde) con distintos valores de T_in,
+   antes y después del cambio:** con T_in hasta 28°C (ventana recomendada
+   cerrada, T_out nunca baja de eso en el pronóstico) la persiana B (con
+   sol real ahora mismo) sigue bajando igual que antes — el acoplo no
+   cambia nada cuando la ventana no se va a abrir. Con T_in=32°C (ventana
+   abierta, T_out siempre más fresco que dentro en todo el horizonte)
+   AMBAS persianas pasan a "arriba" — la B, pese a tener sol real
+   ahora mismo, prioriza la ventilación de una habitación a 32°C sobre
+   evitar una ganancia solar moderada. Nuevo caso de prueba en
+   `test/model.test.js` que reproduce esta comparación exacta (mismo sol,
+   mismo T_in, cambiando solo T_out: con T_out=20 -> ventana abre y
+   persiana sube; con T_out=40 -> ventana se queda cerrada y persiana baja,
+   igual que antes de esta mejora) — 119 casos OK en total (`npm test`),
+   sin romper ninguno de los ya existentes. Verificado también en el
+   dashboard con Playwright y clima real (T_in=32 anotado): las dos
+   tarjetas muestran "Persiana: subir", una de ellas con "(y bajar en
+   1.5h)" cuando el sol vaya a alcanzarla más tarde — sin errores de
+   consola.
+
+4. **Sigue habiendo un matiz físico no modelado, mencionado por el usuario
+   y confirmado con los propios números, que queda anotado como pendiente
+   en vez de implementado: con las DOS ventanas abiertas a la vez, el aire
+   circularía mucho más rápido (ventilación cruzada) que la suma de cada
+   ventana abierta por separado — `qVentTotal` sigue sumando cada ventana
+   de forma independiente, sin ningún término de sinergia entre ambas.**
+   Fuera de alcance de esta mejora concreta (no fue lo que reportó el
+   usuario esta vez) y sin un valor de referencia claro con el que
+   modelarlo sin inventar un parámetro más a ciegas — si hace falta más
+   adelante, se retoma con datos de uso real en vez de una suposición.

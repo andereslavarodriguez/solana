@@ -25,6 +25,7 @@ const piso = {
   factorCapacidad: 6,
   SHGC: 0.6,
   renovacionesHora: 3,
+  fraccionVentPersianaBajada: 0.15,
   bandaConfort: { min: 21, max: 25 },
   ventanas: [
     { nombre: 'A', orientacion: 248, ancho: 2.0, alturaEdificioEnfrente: 15, distanciaEdificioEnfrente: 45 },

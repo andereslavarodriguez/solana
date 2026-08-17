@@ -79,6 +79,7 @@ function plantilla(piso, ubicacion) {
         ${campoNumerico('factorCapacidad', 'Factor de capacidad térmica', piso.factorCapacidad, RANGOS.factorCapacidad, '0.5')}
         ${campoNumerico('SHGC', 'SHGC — ganancia solar del cristal', piso.SHGC, RANGOS.SHGC, '0.05')}
         ${campoNumerico('renovacionesHora', 'Renovaciones de aire / hora', piso.renovacionesHora, RANGOS.renovacionesHora, '0.5')}
+        ${campoNumerico('fraccionVentPersianaBajada', 'Fracción de aire con persiana bajada', piso.fraccionVentPersianaBajada, RANGOS.fraccionVentPersianaBajada, '0.05')}
       </fieldset>
 
       <button type="submit">Guardar</button>
@@ -142,6 +143,7 @@ function leerFormulario(form) {
     factorCapacidad: campo('factorCapacidad'),
     SHGC: campo('SHGC'),
     renovacionesHora: campo('renovacionesHora'),
+    fraccionVentPersianaBajada: campo('fraccionVentPersianaBajada'),
     bandaConfort: { min: campo('bandaConfortMin'), max: campo('bandaConfortMax') },
     ventanas: [0, 1].map((i) => ({
       nombre: campo(`ventana-${i}-nombre`),
@@ -166,6 +168,7 @@ function normalizarPiso(piso) {
     factorCapacidad: Number(piso.factorCapacidad),
     SHGC: Number(piso.SHGC),
     renovacionesHora: Number(piso.renovacionesHora),
+    fraccionVentPersianaBajada: Number(piso.fraccionVentPersianaBajada),
     bandaConfort: { min: Number(piso.bandaConfort.min), max: Number(piso.bandaConfort.max) },
     ventanas: piso.ventanas.map((ventana) => ({
       nombre: ventana.nombre,

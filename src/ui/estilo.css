@@ -343,6 +343,12 @@ button[type='button']:hover {
   font-size: 0.85rem;
 }
 
+.proximo-cambio {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  font-weight: normal;
+}
+
 .aviso-antiguedad {
   color: var(--aviso);
   background: var(--aviso-fondo);

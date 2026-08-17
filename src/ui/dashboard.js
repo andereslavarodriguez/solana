@@ -327,7 +327,24 @@ function recomendacionHtml(nombreVentana, info) {
 
   return `
     ${notaAntiguedad}
-    <p><strong>Ventana:</strong> ${rec.ventana.accion === 'abrir' ? 'abrir' : 'cerrar'}</p>
-    <p><strong>Persiana:</strong> ${rec.persiana.accion === 'arriba' ? 'subir' : 'bajar'}</p>
+    <p><strong>Ventana:</strong> ${rec.ventana.accion === 'abrir' ? 'abrir' : 'cerrar'}${proximoCambioHtml(rec.ventana.proximoCambio)}</p>
+    <p><strong>Persiana:</strong> ${rec.persiana.accion === 'arriba' ? 'subir' : 'bajar'}${proximoCambioHtml(rec.persiana.proximoCambio)}</p>
   `;
+}
+
+// Mejora post-lanzamiento (2026-08-17, docs/estado.md): recomendarVentana/
+// recomendarPersiana ya no solo dicen qué hacer AHORA, también cuándo
+// convendría volver a tocarlo, si toca — se muestra como un inciso corto en
+// vez de una recomendación aparte, para no sumar ruido visual a la tarjeta.
+function proximoCambioHtml(proximoCambio) {
+  if (!proximoCambio) return '';
+  const verbo = proximoCambio.accion === 'abrir' ? 'abrir' : proximoCambio.accion === 'arriba' ? 'subir' : proximoCambio.accion === 'cerrar' ? 'cerrar' : 'bajar';
+  return ` <span class="proximo-cambio">(y ${verbo} en ${formatoDuracionCorta(proximoCambio.minutos)})</span>`;
+}
+
+function formatoDuracionCorta(minutos) {
+  if (minutos < 60) return `${minutos} min`;
+  const horas = minutos / 60;
+  const horasRedondeadas = Math.round(horas * 10) / 10;
+  return horasRedondeadas === 1 ? '1h' : `${horasRedondeadas}h`;
 }

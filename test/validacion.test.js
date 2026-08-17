@@ -63,6 +63,16 @@ caso('SHGC no numérico -> inválido con error en "SHGC"', () => {
   assert.equal(errores.SHGC, 'Introduce un número');
 });
 
+caso('fraccionVentPersianaBajada fuera de rango -> inválido con error en "fraccionVentPersianaBajada"', () => {
+  const datos = { ...PARAMETROS_PISO_POR_DEFECTO, fraccionVentPersianaBajada: 1.5 };
+  const { valido, errores } = validarParametrosPiso(datos);
+  assert.equal(valido, false);
+  assert.equal(
+    errores.fraccionVentPersianaBajada,
+    `Debe estar entre ${RANGOS.fraccionVentPersianaBajada.min} y ${RANGOS.fraccionVentPersianaBajada.max}`,
+  );
+});
+
 caso('bandaConfort.min >= bandaConfort.max -> inválido con error en "bandaConfort.max"', () => {
   const datos = { ...PARAMETROS_PISO_POR_DEFECTO, bandaConfort: { min: 25, max: 21 } };
   const { valido, errores } = validarParametrosPiso(datos);

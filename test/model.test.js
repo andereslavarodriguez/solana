@@ -26,6 +26,7 @@ const piso = {
   factorCapacidad: 6,
   SHGC: 0.6,
   renovacionesHora: 3, // ventana bien abierta, no solo entreabierta
+  fraccionVentPersianaBajada: 0.15,
   bandaConfort: { min: 21, max: 25 },
   ventanas: [
     { nombre: 'A', orientacion: 248, ancho: 2.0, alturaEdificioEnfrente: 15, distanciaEdificioEnfrente: 45 },
@@ -139,6 +140,29 @@ caso('ventana cerrada -> Q_vent = 0', () => {
   assert.equal(q, 0);
 });
 
+// Mejora post-lanzamiento (2026-08-17, docs/estado.md): la persiana también
+// afecta a la ventilación, no solo a la ganancia solar.
+caso('persiana bajada reduce el caudal de ventilación respecto a persiana arriba', () => {
+  const arriba = qVentVentana(piso.ventanas[0], { abierta: true, persianaArriba: true }, 26, 20, piso);
+  const abajo = qVentVentana(piso.ventanas[0], { abierta: true, persianaArriba: false }, 26, 20, piso);
+  console.log(`    Q_vent arriba=${arriba.toFixed(1)} W, abajo=${abajo.toFixed(1)} W`);
+  assert.ok(Math.abs(abajo) < Math.abs(arriba));
+  assert.ok(cerca(abajo / arriba, piso.fraccionVentPersianaBajada, 0.001));
+});
+
+caso('viento real escala el caudal de ventilación', () => {
+  const sinViento = qVentVentana(piso.ventanas[0], { abierta: true, persianaArriba: true }, 26, 20, piso);
+  const conViento = qVentVentana(piso.ventanas[0], { abierta: true, persianaArriba: true }, 26, 20, piso, 30);
+  console.log(`    Q_vent sin viento=${sinViento.toFixed(1)} W, con 30km/h=${conViento.toFixed(1)} W`);
+  assert.ok(Math.abs(conViento) > Math.abs(sinViento));
+});
+
+caso('sin dato de viento (null) -> caudal nominal, igual que sin escalar', () => {
+  const conNull = qVentVentana(piso.ventanas[0], { abierta: true, persianaArriba: true }, 26, 20, piso, null);
+  const sinArgumento = qVentVentana(piso.ventanas[0], { abierta: true, persianaArriba: true }, 26, 20, piso);
+  assert.equal(conNull, sinArgumento);
+});
+
 console.log('\n--- derivadaTemperatura / simularHorizonte (§4) ---');
 
 caso('de noche, todo cerrado, fuera más frío -> dT/dt negativo (se enfría)', () => {
@@ -192,6 +216,26 @@ caso('noche, sin sol, fuera bastante más caliente que dentro -> recomienda cerr
   const r = recomendarVentana('A', 22, pronostico, estados, piso);
   console.log(`    accion = ${r.accion}`);
   assert.equal(r.accion, 'cerrar');
+});
+
+// Mejora post-lanzamiento (2026-08-17, docs/estado.md): en vez de una única
+// decisión fija para todo el horizonte, recomendarVentana ahora también
+// calcula el mejor instante para volver a cambiarla, si lo hay.
+caso('fuera fresco un rato y luego se dispara muy caliente pronto -> abrir ahora, con próximo cambio a cerrar', () => {
+  const sol = { elevacion: -10, azimut: 0, nubesPct: 0 };
+  const pronostico = [
+    ...Array.from({ length: 2 }, () => ({ tOut: 15, sol })),
+    ...Array.from({ length: 30 }, () => ({ tOut: 35, sol })),
+  ];
+  const estados = {
+    A: { abierta: false, persianaArriba: false },
+    B: { abierta: false, persianaArriba: false },
+  };
+  const r = recomendarVentana('A', 26, pronostico, estados, piso);
+  console.log(`    accion = ${r.accion}, proximoCambio = ${JSON.stringify(r.proximoCambio)}`);
+  assert.equal(r.accion, 'abrir');
+  assert.ok(r.proximoCambio);
+  assert.equal(r.proximoCambio.accion, 'cerrar');
 });
 
 // Caso real reportado por el usuario ("me está diciendo cosas absurdas"): de
@@ -255,6 +299,37 @@ caso('sin sol (de noche) y fuera frío -> persiana arriba no supera el límite -
   assert.equal(r.accion, 'arriba');
 });
 
+// Mejora post-lanzamiento (2026-08-17, docs/estado.md): recomendarPersiana
+// ahora tiene en cuenta que, si se recomienda abrir la ventana, subir la
+// persiana también deja entrar más aire (Q_vent depende de la persiana desde
+// la mejora del día anterior) — no solo más sol. Mismo sol y misma ventana en
+// ambos casos, la única diferencia es T_out: con T_out=20 (mucho más fresco
+// que T_in=35) abrir la ventana ayuda mucho, y esa ventilación pesa más que
+// el sol moderado -> arriba; con T_out=40 (más caliente que dentro) abrir NO
+// ayuda, la ventana se queda cerrada, y sin ventilación de por medio el sol
+// vuelve a ser lo único que importa -> bajar, igual que antes de esta mejora.
+caso('con la ventana recomendada abierta, la persiana sube para ventilar aunque haya algo de sol', () => {
+  const sol = { elevacion: 20, azimut: 248, nubesPct: 0 };
+  const estados = {
+    A: { abierta: false, persianaArriba: false },
+    B: { abierta: false, persianaArriba: false },
+  };
+
+  const pronosticoFresco = Array.from({ length: 32 }, () => ({ tOut: 20, sol }));
+  const rFresco = recomendarVentana('A', 35, pronosticoFresco, estados, piso);
+  const rpFresco = recomendarPersiana('A', 35, pronosticoFresco, estados, piso);
+  console.log(`    T_out=20: ventana=${rFresco.accion}, persiana=${rpFresco.accion} (${rpFresco.motivo})`);
+  assert.equal(rFresco.accion, 'abrir');
+  assert.equal(rpFresco.accion, 'arriba');
+
+  const pronosticoCaluroso = Array.from({ length: 32 }, () => ({ tOut: 40, sol }));
+  const rCaluroso = recomendarVentana('A', 35, pronosticoCaluroso, estados, piso);
+  const rpCaluroso = recomendarPersiana('A', 35, pronosticoCaluroso, estados, piso);
+  console.log(`    T_out=40: ventana=${rCaluroso.accion}, persiana=${rpCaluroso.accion} (${rpCaluroso.motivo})`);
+  assert.equal(rCaluroso.accion, 'cerrar');
+  assert.equal(rpCaluroso.accion, 'bajar');
+});
+
 // Caso real reportado por el usuario, junto con el de recomendarVentana de
 // arriba: de noche, con T_in por encima de la banda de confort pero SIN
 // NADA de sol en todo el horizonte, la app recomendaba "bajar persiana" —
@@ -271,6 +346,28 @@ caso('T_in por encima de la banda pero sin sol en todo el horizonte -> indiferen
   const r = recomendarPersiana('A', 26, pronostico, estados, piso);
   console.log(`    accion = ${r.accion} (${r.motivo})`);
   assert.equal(r.accion, 'arriba');
+});
+
+// Mejora post-lanzamiento (2026-08-17, docs/estado.md): mismo cálculo de
+// "próximo cambio" que recomendarVentana, aplicado a la persiana — ahora
+// mismo está nublado y dentro de la banda, pero se despeja con sol fuerte en
+// menos de 1h: sube ahora, pero avisa de cuándo convendrá bajarla.
+caso('nublado y comodo ahora, se despeja con sol fuerte en 45min -> arriba ahora, próximo cambio a bajar', () => {
+  const solDebil = { elevacion: 40, azimut: 248, nubesPct: 100 };
+  const solFuerte = { elevacion: 40, azimut: 248, nubesPct: 0 };
+  const pronostico = [
+    ...Array.from({ length: 3 }, () => ({ tOut: 23, sol: solDebil })),
+    ...Array.from({ length: 29 }, () => ({ tOut: 32, sol: solFuerte })),
+  ];
+  const estados = {
+    A: { abierta: false, persianaArriba: false },
+    B: { abierta: false, persianaArriba: false },
+  };
+  const r = recomendarPersiana('A', 23, pronostico, estados, piso);
+  console.log(`    accion = ${r.accion}, proximoCambio = ${JSON.stringify(r.proximoCambio)}`);
+  assert.equal(r.accion, 'arriba');
+  assert.ok(r.proximoCambio);
+  assert.equal(r.proximoCambio.accion, 'bajar');
 });
 
 console.log(`\n${ok} casos OK\n`);

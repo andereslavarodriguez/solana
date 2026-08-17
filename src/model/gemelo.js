@@ -45,6 +45,7 @@ export function pasoGemelo(estadoGemelo, ahora, actual, estadosVentanas, piso) {
   const pronosticoRepetido = Array.from({ length: pasos }, () => ({
     tOut: actual.tOut,
     sol: actual.sol,
+    viento: actual.viento,
   }));
 
   const trayectoria = simularHorizonte(
@@ -56,7 +57,14 @@ export function pasoGemelo(estadoGemelo, ahora, actual, estadosVentanas, piso) {
   );
 
   const qSolar = qSolarTotal(piso.ventanas, estadosVentanas, actual.sol, piso);
-  const qVent = qVentTotal(piso.ventanas, estadosVentanas, estadoGemelo.tIn, actual.tOut, piso);
+  const qVent = qVentTotal(
+    piso.ventanas,
+    estadosVentanas,
+    estadoGemelo.tIn,
+    actual.tOut,
+    piso,
+    actual.viento,
+  );
 
   return {
     tIn: trayectoria[trayectoria.length - 1],

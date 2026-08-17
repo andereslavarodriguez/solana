@@ -32,6 +32,14 @@ export const PARAMETROS_PISO_POR_DEFECTO = {
   factorCapacidad: 6,
   SHGC: 0.6,
   renovacionesHora: 3,
+  // Fracción del caudal de aire nominal (renovacionesHora) que sigue
+  // entrando con la persiana bajada, respecto a con la persiana subida
+  // (mejora post-lanzamiento, 2026-08-17, ver docs/estado.md — antes
+  // termico.js ignoraba la persiana al calcular la ventilación). 0.15
+  // porque una persiana enrollable normal, bajada del todo, deja pasar
+  // algo de aire por los huecos pero corta la mayor parte del caudal —
+  // elegido a ojo, sin base empírica todavía.
+  fraccionVentPersianaBajada: 0.15,
   bandaConfort: { ...BANDA_CONFORT },
   ventanas: [
     { nombre: 'A', orientacion: 248, ancho: 2.0, alturaEdificioEnfrente: 15, distanciaEdificioEnfrente: 45 },

@@ -12,6 +12,10 @@ function puntoModelo(minutely15, i, lat, lon) {
   return {
     tOut: minutely15.temperature_2m[i],
     sol: { ...sol, nubesPct: minutely15.cloud_cover[i] },
+    // Viento real (km/h) para cada paso del pronóstico, no solo el instante
+    // presente — mejora post-lanzamiento (2026-08-17, docs/estado.md):
+    // termico.js lo usa para escalar la ventilación por ventana abierta.
+    viento: minutely15.wind_speed_10m[i],
   };
 }
 
