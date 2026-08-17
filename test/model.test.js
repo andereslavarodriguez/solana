@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { factorNubosidad, cosIncidencia, iProxy } from '../src/model/irradiancia.js';
 import { elevacionLimiteSombra, ventanaSombreada } from '../src/model/sombra.js';
 import { qSolarVentana, qVentVentana, derivadaTemperatura, simularHorizonte } from '../src/model/termico.js';
-import { recomendarVentana, recomendarPersiana } from '../src/model/recomendacion.js';
+import { recomendarVentana, recomendarPersiana, recomendarPiso } from '../src/model/recomendacion.js';
 
 let ok = 0;
 function caso(nombre, fn) {
@@ -401,6 +401,95 @@ caso('100% nubes ya no es "sin sol": con sol fuerte real después, bajar desde y
   const r = recomendarPersiana('A', 23, pronostico, estados, piso);
   console.log(`    accion = ${r.accion}, proximoCambio = ${JSON.stringify(r.proximoCambio)}`);
   assert.equal(r.accion, 'bajar');
+});
+
+// Corrección 2026-08-17 (docs/estado.md, "la recomendación de ventana no
+// puede depender de cómo esté la persiana"): reportado por el usuario con
+// datos reales — con las mismas condiciones exactas, recomendarVentana
+// daba una respuesta distinta según si la persiana física estaba subida o
+// bajada, porque usaba ese estado como fijo en vez de optimizarlo también.
+// Escenario: calor y sol fuerte ahora mismo, se enfría y anochece (sin sol)
+// en 45min — con persiana arriba de fondo, cerrar-todo-el-horizonte sufre
+// una ganancia solar que "abrir en 45min" evita; con persiana abajo de
+// fondo, esa ganancia nunca existió y no hacía falta abrir. La ventana
+// tiene que dar el mismo resultado en los dos casos, porque la propia
+// recomendación ya decide también qué hacer con la persiana.
+caso('recomendarVentana da la MISMA respuesta sea cual sea el estado físico actual de la persiana', () => {
+  const solFuerte = { elevacion: 45, azimut: 248, nubesPct: 0 };
+  const sinSol = { elevacion: -10, azimut: 248, nubesPct: 0 };
+  const pronostico = [
+    ...Array.from({ length: 3 }, () => ({ tOut: 29, sol: solFuerte })),
+    ...Array.from({ length: 29 }, () => ({ tOut: 20, sol: sinSol })),
+  ];
+  const estadosPersianaSubida = {
+    A: { abierta: false, persianaArriba: true },
+    B: { abierta: false, persianaArriba: false },
+  };
+  const estadosPersianaBajada = {
+    A: { abierta: false, persianaArriba: false },
+    B: { abierta: false, persianaArriba: false },
+  };
+  const rSubida = recomendarVentana('A', 27, pronostico, estadosPersianaSubida, piso);
+  const rBajada = recomendarVentana('A', 27, pronostico, estadosPersianaBajada, piso);
+  console.log(`    persiana física subida -> ${rSubida.accion}, próximo ${JSON.stringify(rSubida.proximoCambio)}`);
+  console.log(`    persiana física bajada -> ${rBajada.accion}, próximo ${JSON.stringify(rBajada.proximoCambio)}`);
+  assert.deepEqual(rSubida, rBajada);
+  assert.equal(rSubida.accion, 'cerrar');
+  assert.equal(rSubida.proximoCambio.accion, 'abrir');
+  assert.equal(rSubida.proximoCambio.minutos, 45);
+});
+
+// Corrección 2026-08-17, segunda vuelta (docs/estado.md): el usuario
+// insistió en que el caso anterior no bastaba — "la recomendación debe
+// ser la mejor de las 4 combinaciones... no depende de cómo estén ni una
+// ventana ni otra, ni una persiana ni otra". El caso anterior solo variaba
+// la persiana de A; este varía las 4 magnitudes físicas (ventana y
+// persiana de A, ventana y persiana de B) a la vez y comprueba que
+// recomendarVentana/recomendarPersiana para A dan exactamente el mismo
+// resultado en los 4 casos.
+caso('recomendarVentana/recomendarPersiana dan la MISMA respuesta variando las 4 magnitudes físicas (A y B, ventana y persiana)', () => {
+  const solFuerte = { elevacion: 45, azimut: 248, nubesPct: 0 };
+  const sinSol = { elevacion: -10, azimut: 248, nubesPct: 0 };
+  const pronostico = [
+    ...Array.from({ length: 3 }, () => ({ tOut: 29, sol: solFuerte })),
+    ...Array.from({ length: 29 }, () => ({ tOut: 20, sol: sinSol })),
+  ];
+  const combosFisicos = [
+    { A: { abierta: true, persianaArriba: true }, B: { abierta: true, persianaArriba: true } },
+    { A: { abierta: false, persianaArriba: false }, B: { abierta: false, persianaArriba: false } },
+    { A: { abierta: true, persianaArriba: false }, B: { abierta: false, persianaArriba: true } },
+    { A: { abierta: false, persianaArriba: true }, B: { abierta: true, persianaArriba: false } },
+  ];
+
+  const resultados = combosFisicos.map((estados) => ({
+    ventana: recomendarVentana('A', 27, pronostico, estados, piso),
+    persiana: recomendarPersiana('A', 27, pronostico, estados, piso),
+  }));
+
+  resultados.forEach((r, i) => {
+    console.log(`    combo ${i}: ventana=${r.ventana.accion} persiana=${r.persiana.accion}`);
+    assert.deepEqual(r.ventana, resultados[0].ventana);
+    assert.deepEqual(r.persiana, resultados[0].persiana);
+  });
+  assert.equal(resultados[0].ventana.accion, 'cerrar');
+  assert.equal(resultados[0].ventana.proximoCambio.minutos, 45);
+});
+
+caso('recomendarPiso() da exactamente lo mismo que llamar a recomendarVentana/recomendarPersiana por cada ventana', () => {
+  const pronostico = Array.from({ length: 8 }, (_, i) => ({
+    tOut: 22 - i,
+    sol: { elevacion: -10, azimut: 0, nubesPct: 0 },
+  }));
+  const estados = {
+    A: { abierta: false, persianaArriba: false },
+    B: { abierta: false, persianaArriba: true },
+  };
+  const piso5 = piso;
+  const resultado = recomendarPiso(26, pronostico, estados, piso5);
+  for (const v of piso5.ventanas) {
+    assert.deepEqual(resultado[v.nombre].ventana, recomendarVentana(v.nombre, 26, pronostico, estados, piso5));
+    assert.deepEqual(resultado[v.nombre].persiana, recomendarPersiana(v.nombre, 26, pronostico, estados, piso5));
+  }
 });
 
 console.log(`\n${ok} casos OK\n`);

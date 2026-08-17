@@ -14,7 +14,7 @@ import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { cargarEstadoVentanas, guardarEstadoVentanas } from '../persistencia/estadoVentanas.js';
 import { listarAnotaciones, guardarAnotacion } from '../persistencia/anotaciones.js';
 import { cargarGemelo, guardarGemelo } from '../persistencia/gemelo.js';
-import { recomendarVentana, recomendarPersiana } from '../model/recomendacion.js';
+import { recomendarPiso } from '../model/recomendacion.js';
 import { estadoGemeloInicial, pasoGemelo, regresoresPromedio } from '../model/gemelo.js';
 import { construirFilasRegresion, recalibrar } from '../model/recalibracion.js';
 import { estadoAntiguedad, horasDesde, formatoAntiguedad } from './antiguedadAnotacion.js';
@@ -83,22 +83,22 @@ export function montarDashboard(root, storage) {
     const horas = horasDesde(ultimaAnotacion.timestamp, ahora);
     if (antiguedad === 'caducada') return { estado: 'caducada', horas };
 
+    // Una sola llamada calcula ventana Y persiana de las DOS ventanas a la
+    // vez (corrección 2026-08-17, docs/estado.md: la mejor combinación es
+    // conjunta entre las 4 magnitudes físicas, no una búsqueda por
+    // ventana) — más barato que llamar a recomendarVentana/
+    // recomendarPersiana por separado 4 veces, y garantiza que las dos
+    // tarjetas muestran una combinación mutuamente consistente.
+    const porVentana = recomendarPiso(
+      ultimaAnotacion.temperatura,
+      datosClima.pronostico,
+      estadoVentanas,
+      piso,
+    );
     const recomendaciones = piso.ventanas.map((ventana) => ({
       nombre: ventana.nombre,
-      ventana: recomendarVentana(
-        ventana.nombre,
-        ultimaAnotacion.temperatura,
-        datosClima.pronostico,
-        estadoVentanas,
-        piso,
-      ),
-      persiana: recomendarPersiana(
-        ventana.nombre,
-        ultimaAnotacion.temperatura,
-        datosClima.pronostico,
-        estadoVentanas,
-        piso,
-      ),
+      ventana: porVentana[ventana.nombre].ventana,
+      persiana: porVentana[ventana.nombre].persiana,
     }));
 
     return { estado: antiguedad, horas, recomendaciones };

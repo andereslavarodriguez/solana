@@ -3277,3 +3277,184 @@ sigue dejando pasar luz difusa notable, no es lo mismo que "de noche".
    edificio en ese momento, `cosIncidencia` recortado a 0 sin importar la
    nubosidad) se queda igual en "arriba" — coherente con que solo influye
    la ventana que de verdad puede recibir sol, no las dos por igual.
+
+### Corrección: la recomendación de ventana ya no depende del botón físico de persiana (2026-08-17)
+
+El usuario, comparando la recomendación con distintas combinaciones reales
+de persianas, señaló el problema con precisión antes de que se le
+explicara ninguna causa: "la recomendación de qué hacer con las ventanas
+no puede depender de cómo estén las persianas. la recomendación debe ser
+la mejor de las 4 combinaciones... debería decirme en 3 horas abre la
+ventana y la persiana, no que dé por hecho que voy a dejar la persiana
+bajada". Diagnóstico confirmado leyendo el diseño ya documentado más
+arriba (checkpoint "Persiana y ventana acopladas de verdad", mismo día):
+`recomendarVentana` calculaba el horario de la ventana usando el estado
+FÍSICO ACTUAL de la persiana (`estadosVentanasActuales`, el que declara el
+usuario con el botón) como fijo durante toda la simulación — así que subir
+o bajar la persiana con la ventana cerrada cambiaba de verdad la
+recomendación de la ventana, porque cambia cuánto calor solar entra por el
+cristal aunque la ventana esté cerrada. Ese checkpoint ya había reconocido
+el acoplo (ventana → persiana) pero explícitamente lo dejó de un solo
+sentido ("ida y vuelta completa... se descartó por complejidad no
+justificada por el problema real encontrado") — el problema real que
+faltaba para justificarlo llegó ese mismo día, unas horas más tarde.
+
+1. **`optimizarConjunto()` (`src/model/recomendacion.js`), descenso por
+   coordenadas de 2 rondas, no una búsqueda combinatoria de las 4
+   combinaciones × todos los instantes de cambio de las dos a la vez.**
+   Se valoró la búsqueda combinatoria completa (matemáticamente exacta,
+   probaría cada combinación de instante de cambio de ventana × instante
+   de cambio de persiana) pero sale ~65× más cara que el resto del motor
+   sin necesidad: cada ronda de `optimizarConjunto` ya es una búsqueda
+   EXACTA de un campo con el otro fijo (reutiliza `mejorEstrategiaUnCambio`
+   tal cual), así que alternar ventana→persiana→ventana... es
+   literalmente un descenso por coordenadas sobre la misma distancia
+   ponderada que ya usa todo el motor — cada ronda no puede empeorar el
+   resultado de la ronda anterior (cada una es un mínimo exacto de su
+   propio campo), así que converge a un punto fijo estable sin explorar
+   las ~4356 combinaciones por ventana que exigiría la fuerza bruta.
+   Ronda 0: calcula la ventana con la persiana física actual de fondo
+   (igual que antes de esta corrección) y decide la persiana óptima para
+   ese horario de ventana. Ronda 1: recalcula la ventana usando esa
+   persiana YA OPTIMIZADA de fondo (no ya la física) y vuelve a decidir la
+   persiana. `recomendarVentana`/`recomendarPersiana` devuelven el
+   resultado de la ronda final.
+
+2. **2 rondas (`RONDAS_OPTIMIZACION_CONJUNTA = 2`), verificado
+   empíricamente hasta 5 rondas antes de fijarlo, no una intuición sin
+   comprobar.** Con un script ad-hoc (no committeado) sobre el clima real
+   del momento (29.7°C fuera, 27.5°C dentro, 100% nublado) y sobre un
+   escenario sintético (calor+sol ahora, se enfría y anochece en 45min): a
+   partir de la ronda 1 el resultado deja de cambiar (comprobado hasta la
+   ronda 4), y — más importante que la estabilidad en sí — dos búsquedas
+   arrancadas con la persiana física en `SUBIDA` y en `BAJADA`
+   convergen exactamente al mismo resultado final, que es el bug concreto
+   que reportó el usuario. `assert.deepEqual` entre ambas en el nuevo caso
+   de test (ver punto 4) comprueba esto mismo, no solo que las dos den la
+   misma `accion`.
+
+3. **Alcance deliberadamente NO ampliado a las dos ventanas a la vez —
+   sigue siendo la misma limitación ya documentada esa mañana ("no hay
+   ningún término de sinergia... si hace falta más adelante, se retoma
+   con datos de uso real").** `optimizarConjunto` co-optimiza
+   ventana+persiana de UNA MISMA ventana; la ventana contraria se sigue
+   tratando como un dato de entrada fijo (su estado físico real, vía
+   `estadosVentanasActuales`), tal y como ya hacía el diseño anterior —
+   confirmado con el mismo script real: la recomendación de la ventana A
+   deja de depender de la persiana de A, pero la de la ventana B (que
+   comparte la misma zona térmica de una sola pieza, spec.md §4) sigue
+   dependiendo de qué haga A, porque el calor solar que entra por A
+   calienta la MISMA habitación que ventila B — eso es física real de una
+   sola zona, no el bug reportado, y ampliar la co-optimización a las dos
+   ventanas a la vez multiplicaría el coste (2 ventanas × 2 rondas cada
+   una, con dependencia circular entre ambas) sin que haya evidencia
+   todavía de que haga falta.
+
+4. **Verificación:** caso de prueba nuevo en `test/model.test.js`
+   reproduciendo el escenario del usuario (calor y sol fuerte ahora,
+   anochece en 45min) llamando a `recomendarVentana` dos veces con
+   `estadosVentanasActuales` idénticos salvo la persiana física de A
+   (subida vs. bajada) — `assert.deepEqual(rSubida, rBajada)` sobre el
+   resultado completo (acción, próximo cambio y trayectoria), no solo la
+   acción. 36 casos OK en `model.test.js` (uno nuevo), 125 en total en
+   `npm test` — ninguno de los 35 casos ya existentes cambió de resultado
+   con el nuevo diseño (los escenarios de prueba ya usaban combinaciones
+   de persiana que coincidían con el óptimo conjunto, así que no hizo
+   falta reescribir ninguno, a diferencia de la corrección del suelo de
+   nubosidad de más arriba). Verificado también con clima real del
+   momento (29.7°C fuera, 100% nublado): la ventana Suroeste da "cerrar"
+   en las 4 combinaciones de persianas reales posibles (antes daba
+   resultados distintos según la persiana física de esa misma ventana).
+
+### Segunda vuelta: la combinación óptima es de las 4 magnitudes a la vez, no por ventana (2026-08-17, misma tarde)
+
+El usuario no se conformó con la corrección anterior — con razón: esa
+corrección solo unía ventana y persiana de la MISMA ventana física
+(`optimizarConjunto`, un solo `nombreVentana`), dejando la ventana
+CONTRARIA fija en su estado físico real. "La recomendación debe ser la
+mejor de las 4 combinaciones... esa posición no depende de como esté ni
+una ventana ni otra, ni una persiana ni otra. la posición óptima es la
+que hay que calcular combinando las 4 opciones de cada conjunto ventana
+persiana" — la propia sección "Persiana y ventana acopladas de verdad"
+de esa misma mañana ya había dejado anotado el límite exacto que el
+usuario acababa de encontrar en la práctica ("no hay ningún término de
+sinergia... si hace falta más adelante, se retoma con datos de uso
+real") — llegó antes de lo esperado.
+
+1. **`optimizarConjuntoGlobal()` sustituye a `optimizarConjunto()` —
+   generaliza el descenso por coordenadas de 2 campos (ventana+persiana
+   de UNA ventana) a 4 campos (ventana+persiana de las DOS ventanas),
+   reutilizando exactamente la misma maquinaria de simulación.**
+   `trayectoriaConCambios`/`mejorEstrategiaUnCambio` pasan de asumir un
+   único `nombreVentana` implícito a que cada entrada de `cambios` lleve
+   su propio `ventana` — cambio mínimo (una clave más por entrada) que
+   permite que `fondo` incluya cambios de la ventana CONTRARIA, no solo
+   de campos de la misma. `camposDelPiso(parametrosPiso)` deriva los 4
+   campos a optimizar (ventana+persiana de cada `parametrosPiso.ventanas`)
+   en vez de tener a A y B escritos a mano — generaliza sola si algún día
+   hay más de dos ventanas, aunque eso siga sin ser un objetivo de la
+   spec.
+
+2. **Sigue sin ser una búsqueda combinatoria de las 4×4 combinaciones ×
+   todos los instantes de cambio a la vez — mismo criterio de coste ya
+   razonado esa mañana, ahora aplicado a 4 campos en vez de 2.** Cada
+   ronda recorre los 4 campos en orden fijo (A.abierta, A.persianaArriba,
+   B.abierta, B.persianaArriba) y busca el mejor horario de cada uno con
+   los otros TRES ya fijados en su mejor valor conocido hasta el momento
+   (de esta ronda si ya se recalcularon, de la ronda anterior si no) —
+   descenso por coordenadas de Gauss-Seidel, no de Jacobi (usar el valor
+   más reciente de cada campo, no solo el de la ronda anterior, converge
+   más rápido).
+
+3. **2 rondas (mismo valor que la corrección anterior, no cambiado),
+   verificado esta vez con 7 combinaciones físicas de partida distintas
+   (las 4 combinaciones de persiana A/B, más 3 variando también ventana
+   A/B abierta/cerrada) sobre clima real y sobre el escenario sintético
+   con próximo cambio.** Las 7 convergen al mismo resultado final ya en
+   la ronda 1, estable hasta la ronda 5 comprobada — mismo método de
+   verificación (script ad-hoc, no committeado) que la corrección
+   anterior, ahora con más combinaciones de partida para cubrir el caso
+   que el usuario señaló explícitamente (las 4 magnitudes, no solo 2).
+
+4. **`recomendarPiso(tInActual, pronostico, estadosVentanasActuales,
+   parametrosPiso)`, función nueva — calcula la combinación global UNA
+   VEZ y devuelve ventana+persiana de las dos ventanas ya formateadas
+   (`{ [nombre]: { ventana, persiana } }`), en vez de que cada consumidor
+   llame por separado.** Motivo: `recomendarVentana`/`recomendarPersiana`
+   (mantenidas, mismo contrato de siempre, para tests y consumidores que
+   solo quieran un campo) ahora recalculan la optimización GLOBAL
+   completa cada una — 4 llamadas sueltas (como hacía `dashboard.js`)
+   repetirían esa optimización 4 veces sin necesidad. `dashboard.js`
+   (`calcularRecomendaciones`) pasa a una única llamada a
+   `recomendarPiso`, más barato y además garantiza que las dos tarjetas
+   de la pantalla muestren una combinación mutuamente consistente
+   (calculada de una sola vez, no 4 veces con la posibilidad — remota
+   pero real — de una carrera de datos entre llamadas si el reloj/clima
+   cambiaran entre medias). `formatearVentana`/`formatearPersiana` se
+   extrajeron como funciones puras compartidas entre `recomendarPiso` y
+   los envoltorios de un solo campo, en vez de duplicar el `if/else` del
+   `motivo` de la persiana.
+
+5. **Coste real: sigue siendo barato.** Una ronda completa son 8
+   búsquedas de un campo (4 campos × [hasta 2 candidatos de partida cada
+   uno]), cada una recorriendo hasta 33 instantes de cambio — con 2
+   rondas, del orden de unas pocas centenas de simulaciones de horizonte
+   por cada llamada a `recomendarPiso`/`recomendarVentana`/
+   `recomendarPersiana`, cada simulación de como mucho 32 pasos de Euler
+   con un puñado de operaciones en coma flotante cada uno — nada que se
+   note en un botón de móvil, verificado sin problema visible de
+   fluidez en las capturas de Playwright del dashboard con clima real.
+
+6. **Verificación:** dos casos de prueba nuevos en `test/model.test.js` —
+   uno reproduciendo el escenario exacto del usuario variando las 4
+   magnitudes físicas a la vez (`assert.deepEqual` entre las 4
+   combinaciones) sobre el mismo escenario sintético de la corrección
+   anterior, y otro comprobando que `recomendarPiso()` da exactamente lo
+   mismo que llamar a `recomendarVentana`/`recomendarPersiana` por
+   separado para cada ventana. 38 casos OK en `model.test.js` (dos
+   nuevos), 127 en total en `npm test`, ninguno de los 36 ya existentes
+   cambió de resultado. Verificado también en el dashboard real
+   (Playwright, clima real, 27.5°C anotados, ambas ventanas
+   cerradas/persiana bajada): las dos tarjetas muestran una combinación
+   coherente ("Suroeste: cerrar/bajar", "Noreste: cerrar (abrir en
+   2.3h)/subir"), sin errores de consola.

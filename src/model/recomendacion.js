@@ -61,17 +61,19 @@ function estadoEnPaso(estadoInicial, pasoCambio, paso) {
   return paso < pasoCambio ? estadoInicial : !estadoInicial;
 }
 
-// Simula la trayectoria de una ventana con uno o varios campos (`abierta`,
-// `persianaArriba`) que cambian de forma independiente cada uno en su propio
-// instante — cada entrada de `cambios` es { campo, estadoInicial, pasoCambio }
-// (0 = cambia desde ya, pronostico.length = no cambia nunca dentro del
-// horizonte). El resto de campos/ventanas se dejan como están ahora mismo
-// durante todo el horizonte. Con un solo cambio, es exactamente el diseño
-// original de un único instante de cambio; con dos (ver mejorEstrategiaUnCambio
-// más abajo, parámetro `fondo`) permite que la búsqueda de la persiana tenga
-// en cuenta CUÁNDO estará abierta la ventana, en vez de asumir fijo su
-// estado físico actual (ver docs/estado.md, mejora del 17-08).
-function trayectoriaConCambios(tInActual, pronostico, estadosBase, nombreVentana, cambios, parametrosPiso) {
+// Simula la trayectoria de la ZONA TÉRMICA ÚNICA (spec.md §4 — un solo
+// T_in para todo el salón-cocina) con uno o varios campos, de una o varias
+// ventanas, cambiando cada uno de forma independiente en su propio
+// instante — cada entrada de `cambios` es { ventana, campo, estadoInicial,
+// pasoCambio } (0 = cambia desde ya, pronostico.length = no cambia nunca
+// dentro del horizonte). Cualquier (ventana, campo) que no aparezca en
+// `cambios` se deja como esté ahora mismo (`estadosBase`) durante todo el
+// horizonte. Con un único cambio es exactamente el diseño original de un
+// solo instante de cambio; con varios — de la MISMA ventana o de
+// ventanas DISTINTAS — permite optimizar conjuntamente ventana+persiana de
+// las dos ventanas a la vez (ver optimizarConjuntoGlobal más abajo,
+// docs/estado.md, corrección 2026-08-17).
+function trayectoriaConCambios(tInActual, pronostico, estadosBase, cambios, parametrosPiso) {
   const N = pronostico.length;
   const puntos = [...new Set([0, N, ...cambios.map((c) => Math.max(0, Math.min(c.pasoCambio, N)))])].sort(
     (a, b) => a - b
@@ -86,7 +88,7 @@ function trayectoriaConCambios(tInActual, pronostico, estadosBase, nombreVentana
 
     const estados = clonarEstados(estadosBase);
     for (const c of cambios) {
-      estados[nombreVentana][c.campo] = estadoEnPaso(c.estadoInicial, c.pasoCambio, inicio);
+      estados[c.ventana][c.campo] = estadoEnPaso(c.estadoInicial, c.pasoCambio, inicio);
     }
 
     const segmento = simularHorizonte(tIn, pronostico.slice(inicio, fin), estados, parametrosPiso);
@@ -121,15 +123,16 @@ const MEJORA_MINIMA = 0.01;
 // más tardío (recorrido de mayor a menor) — o sea, por defecto no cambiar
 // nada si no hay un beneficio claro, mismo sesgo que ya tenía el diseño
 // anterior ("empate -> cerrar").
-// `fondo`: cambios ya decididos de antemano en OTRO campo de la MISMA
-// ventana (p.ej. el horario de "abierta" que ya calculó recomendarVentana),
-// que se mantienen fijos mientras se busca el mejor instante de cambio para
-// `campo`. Opcional — sin él, el comportamiento es el mismo de antes.
+// `fondo`: cambios ya decididos de antemano en OTRO(S) campo(s) — de la
+// MISMA ventana (p.ej. su propia persiana) o de la OTRA ventana (comparten
+// la misma zona térmica) — que se mantienen fijos mientras se busca el
+// mejor instante de cambio para (`ventana`, `campo`). Opcional — sin él,
+// el resto de campos se queda en su estado físico actual todo el horizonte.
 function mejorEstrategiaUnCambio(
   tInActual,
   pronostico,
   estadosVentanasActuales,
-  nombreVentana,
+  ventana,
   campo,
   parametrosPiso,
   estadosIniciales,
@@ -144,8 +147,7 @@ function mejorEstrategiaUnCambio(
         tInActual,
         pronostico,
         estadosVentanasActuales,
-        nombreVentana,
-        [{ campo, estadoInicial, pasoCambio }, ...fondo],
+        [{ ventana, campo, estadoInicial, pasoCambio }, ...fondo],
         parametrosPiso
       );
       const distancia = distanciaAcumulada(trayectoria, banda);
@@ -176,45 +178,100 @@ function interpretarResultado(resultado, totalPasos) {
   return { estadoAhora, proximoCambio };
 }
 
-// Calcula el mejor horario de abierta/cerrada para una ventana — extraído
-// como función propia (no solo el cuerpo de recomendarVentana) porque
-// recomendarPersiana también lo necesita, para saber CUÁNDO va a estar
-// abierta la ventana antes de decidir la persiana (ver más abajo).
-function calcularMejorVentana(tInActual, pronostico, estadosVentanasActuales, nombreVentana, parametrosPiso) {
-  return mejorEstrategiaUnCambio(
-    tInActual,
-    pronostico,
-    estadosVentanasActuales,
-    nombreVentana,
-    'abierta',
-    parametrosPiso,
-    [false, true]
-  );
+// Los 4 grados de libertad reales del piso (spec.md §3.4: dos ventanas, cada
+// una con su ventana y su persiana) — orden fijo y determinista (mismo
+// orden que `parametrosPiso.ventanas`, ventana antes que persiana dentro de
+// cada una) para que optimizarConjuntoGlobal() sea reproducible entre
+// llamadas con los mismos datos.
+function camposDelPiso(parametrosPiso) {
+  const campos = [];
+  for (const v of parametrosPiso.ventanas) {
+    campos.push({ ventana: v.nombre, campo: 'abierta', candidatos: [false, true] });
+    // Persiana: un solo candidato de partida, 'arriba' (decisión ya
+    // establecida, spec.md §5 — sin motivo para tenerla bajada si no hace
+    // falta), igual que antes de esta corrección.
+    campos.push({ ventana: v.nombre, campo: 'persianaArriba', candidatos: [true] });
+  }
+  return campos;
 }
 
-// Abrir/cerrar: busca el mejor instante para pasar de "cerrada" a "abierta" o
-// de "abierta" a "cerrada" (se prueban ambos puntos de partida — no se
-// asume que el estado físico actual de la ventana sea el óptimo de partida,
-// igual que el diseño original tampoco lo asumía). `accion` es el estado
-// recomendado AHORA MISMO; `proximoCambio`, si lo hay, cuándo conviene volver
-// a tocarla y a qué estado (en vez de forzar una única decisión fija para
-// todo el horizonte).
-export function recomendarVentana(
-  nombreVentana,
-  tInActual,
-  pronostico,
-  estadosVentanasActuales,
-  parametrosPiso
-) {
-  const resultado = calcularMejorVentana(
-    tInActual,
-    pronostico,
-    estadosVentanasActuales,
-    nombreVentana,
-    parametrosPiso
-  );
-  const { estadoAhora, proximoCambio } = interpretarResultado(resultado, pronostico.length);
+// Número de rondas de descenso por coordenadas (cada campo se recalcula con
+// los demás ya fijados en su mejor valor conocido hasta el momento) hasta
+// fijar el resultado. NO es una búsqueda combinatoria de las 4 combinaciones
+// ventana/persiana × las dos ventanas × todos los instantes de cambio a la
+// vez (sería exacta, pero del orden de miles de veces más cara: cada ronda
+// de aquí ya es una búsqueda EXACTA de un solo campo con los otros tres
+// fijos, así que recorrer los 4 campos varias veces es un descenso por
+// coordenadas sobre la misma distancia ponderada de todo el motor) —
+// converge al mismo punto fijo con mucho menos cálculo. 2 rondas (8
+// búsquedas de un campo en total), verificado con datos reales y dos
+// escenarios sintéticos (docs/estado.md, corrección 2026-08-17): a partir
+// de la ronda 1 el resultado ya no cambia (comprobado hasta la ronda 5) y
+// — el motivo real de la corrección — deja de depender de con qué estado
+// físico (ventana o persiana, de cualquiera de las dos ventanas) se arranca
+// la búsqueda.
+const RONDAS_OPTIMIZACION_GLOBAL = 2;
 
+// Optimiza las ventanas Y persianas de TODO el piso a la vez — sustituye el
+// diseño anterior (`optimizarConjunto`, por ventana) que solo unía ventana
+// y persiana de la MISMA ventana y dejaba la ventana contraria fija en su
+// estado físico. Bug real que motivó este cambio (reportado por el
+// usuario, docs/estado.md): "la recomendación debe ser la mejor de las 4
+// combinaciones... no depende de cómo estén ni una ventana ni otra, ni una
+// persiana ni otra" — con el diseño por-ventana, la recomendación de la
+// ventana B sí podía depender de qué persiana física tuviera puesta la
+// ventana A (comparten la misma zona térmica, spec.md §4), aunque ya no
+// dependiera de su propia persiana.
+//
+// Descenso por coordenadas: recorre los 4 campos en orden fijo
+// (`camposDelPiso`), y para cada uno busca su mejor horario con los OTROS
+// TRES ya fijados en el mejor valor conocido hasta ese momento (de esta
+// ronda si ya se recalcularon, de la ronda anterior si no) — así cada
+// campo nuevo ya tiene en cuenta el efecto de los demás, incluida la otra
+// ventana. Se repite `RONDAS_OPTIMIZACION_GLOBAL` veces completas.
+function optimizarConjuntoGlobal(tInActual, pronostico, estadosVentanasActuales, parametrosPiso) {
+  const campos = camposDelPiso(parametrosPiso);
+  const resultados = {};
+  parametrosPiso.ventanas.forEach((v) => {
+    resultados[v.nombre] = {};
+  });
+
+  function fondoActual(ventanaExcluida, campoExcluido) {
+    const fondo = [];
+    for (const v of parametrosPiso.ventanas) {
+      for (const campo of ['abierta', 'persianaArriba']) {
+        if (v.nombre === ventanaExcluida && campo === campoExcluido) continue;
+        const r = resultados[v.nombre][campo];
+        if (r) fondo.push({ ventana: v.nombre, campo, estadoInicial: r.estadoInicial, pasoCambio: r.pasoCambio });
+      }
+    }
+    return fondo;
+  }
+
+  for (let ronda = 0; ronda < RONDAS_OPTIMIZACION_GLOBAL; ronda += 1) {
+    for (const { ventana, campo, candidatos } of campos) {
+      resultados[ventana][campo] = mejorEstrategiaUnCambio(
+        tInActual,
+        pronostico,
+        estadosVentanasActuales,
+        ventana,
+        campo,
+        parametrosPiso,
+        candidatos,
+        fondoActual(ventana, campo)
+      );
+    }
+  }
+
+  return resultados; // { [nombreVentana]: { abierta: {...}, persianaArriba: {...} } }
+}
+
+// Abrir/cerrar: `accion` es el estado recomendado AHORA MISMO;
+// `proximoCambio`, si lo hay, cuándo conviene volver a tocarla y a qué
+// estado (en vez de forzar una única decisión fija para todo el
+// horizonte).
+function formatearVentana(resultado, totalPasos) {
+  const { estadoAhora, proximoCambio } = interpretarResultado(resultado, totalPasos);
   return {
     accion: estadoAhora ? 'abrir' : 'cerrar',
     proximoCambio: proximoCambio
@@ -224,56 +281,10 @@ export function recomendarVentana(
   };
 }
 
-// Subir/bajar persiana: el punto de partida de la búsqueda es siempre
-// "arriba" (decisión ya establecida, spec.md §5 — sin motivo para tenerla
-// bajada si no hace falta), y se busca el mejor instante para bajarla si el
-// sol previsto lo justifica en algún momento del horizonte. Si no hay sol en
-// absoluto (de noche, o toda la ventana en sombra), cambiarla en cualquier
-// instante da exactamente la misma trayectoria — el empate lo resuelve el
-// mismo sesgo de "no cambiar si no hay beneficio claro", así que sale
-// 'arriba' sin necesitar ya un caso especial para "indiferente".
-//
-// Mejora post-lanzamiento (2026-08-17, ver docs/estado.md): la búsqueda usa
-// el horario de "abierta" que RECOMIENDA recomendarVentana para esta misma
-// ventana (no el estado físico actual, normalmente todavía cerrada hasta
-// que el usuario actúa) — desde que Q_vent depende de la persiana (mejora
-// del día anterior), subir la persiana con la ventana abierta también deja
-// entrar más aire, no solo más sol. Sin este acoplo, la búsqueda de la
-// persiana nunca veía ese beneficio de ventilación (la ventana se asumía
-// cerrada todo el horizonte) y por eso, con la persiana ya bajada por sol,
-// jamás encontraba motivo para subirla aunque abrir la ventana la hiciera
-// interesante para ventilar.
-export function recomendarPersiana(
-  nombreVentana,
-  tInActual,
-  pronostico,
-  estadosVentanasActuales,
-  parametrosPiso
-) {
-  const ventana = calcularMejorVentana(
-    tInActual,
-    pronostico,
-    estadosVentanasActuales,
-    nombreVentana,
-    parametrosPiso
-  );
-  const horarioVentana = {
-    campo: 'abierta',
-    estadoInicial: ventana.estadoInicial,
-    pasoCambio: ventana.pasoCambio,
-  };
-
-  const resultado = mejorEstrategiaUnCambio(
-    tInActual,
-    pronostico,
-    estadosVentanasActuales,
-    nombreVentana,
-    'persianaArriba',
-    parametrosPiso,
-    [true],
-    [horarioVentana]
-  );
-  const { estadoAhora, proximoCambio } = interpretarResultado(resultado, pronostico.length);
+// Subir/bajar persiana: mismo criterio que formatearVentana, más un
+// `motivo` en prosa corta.
+function formatearPersiana(resultado, totalPasos) {
+  const { estadoAhora, proximoCambio } = interpretarResultado(resultado, totalPasos);
 
   let motivo;
   if (!estadoAhora) {
@@ -291,4 +302,57 @@ export function recomendarPersiana(
     proximoCambio: proximoCambio ? { accion: 'bajar', ...proximoCambio } : null,
     trayectoria: resultado.trayectoria,
   };
+}
+
+// Recomendación conjunta para TODO el piso — una sola llamada calcula la
+// mejor combinación global (`optimizarConjuntoGlobal`) y devuelve ventana +
+// persiana ya formateadas para cada ventana declarada en `parametrosPiso`.
+// Preferible a llamar a recomendarVentana/recomendarPersiana por separado
+// para cada ventana (lo que hacía dashboard.js hasta esta corrección): con
+// 4 llamadas sueltas, cada una repetiría la misma optimización global desde
+// cero — aquí se hace una vez y se reparte.
+export function recomendarPiso(tInActual, pronostico, estadosVentanasActuales, parametrosPiso) {
+  const resultados = optimizarConjuntoGlobal(tInActual, pronostico, estadosVentanasActuales, parametrosPiso);
+  const porVentana = {};
+  for (const v of parametrosPiso.ventanas) {
+    porVentana[v.nombre] = {
+      ventana: formatearVentana(resultados[v.nombre].abierta, pronostico.length),
+      persiana: formatearPersiana(resultados[v.nombre].persianaArriba, pronostico.length),
+    };
+  }
+  return porVentana;
+}
+
+// Abrir/cerrar una ventana concreta — envoltorio de un solo campo sobre
+// recomendarPiso(), para quien solo necesita esta ventana (tests, y
+// cualquier consumidor que no quiera las dos a la vez). Llama a la
+// optimización global completa igual que recomendarPiso, así que para
+// pedir ventana Y persiana de las dos ventanas es más barato llamar una
+// vez a recomendarPiso() que a esta función 4 veces seguidas.
+//
+// Corrección 2026-08-17 (docs/estado.md): ya NO asume que la persiana de
+// esta ventana, ni el estado de la OTRA ventana, se quedan como estén
+// físicamente ahora — usa optimizarConjuntoGlobal (las 4 combinaciones a
+// la vez) en vez de fijar todo lo demás en su valor físico actual.
+export function recomendarVentana(
+  nombreVentana,
+  tInActual,
+  pronostico,
+  estadosVentanasActuales,
+  parametrosPiso
+) {
+  const resultados = optimizarConjuntoGlobal(tInActual, pronostico, estadosVentanasActuales, parametrosPiso);
+  return formatearVentana(resultados[nombreVentana].abierta, pronostico.length);
+}
+
+// Subir/bajar una persiana concreta — mismo criterio que recomendarVentana.
+export function recomendarPersiana(
+  nombreVentana,
+  tInActual,
+  pronostico,
+  estadosVentanasActuales,
+  parametrosPiso
+) {
+  const resultados = optimizarConjuntoGlobal(tInActual, pronostico, estadosVentanasActuales, parametrosPiso);
+  return formatearPersiana(resultados[nombreVentana].persianaArriba, pronostico.length);
 }
