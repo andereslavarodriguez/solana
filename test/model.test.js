@@ -34,20 +34,20 @@ const piso = {
   ],
 };
 
-console.log('\n--- factorNubosidad (§4, modulación lineal por nubosidad) ---');
+console.log('\n--- factorNubosidad (§4, lineal con suelo — corrección 2026-08-17) ---');
 
 caso('0% nubes -> factor 1', () => {
   assert.equal(factorNubosidad(0), 1);
 });
-caso('100% nubes -> factor 0', () => {
-  assert.equal(factorNubosidad(100), 0);
+caso('100% nubes -> factor FACTOR_NUBES_MINIMO (0.2), no 0 — sigue entrando luz difusa', () => {
+  assert.equal(factorNubosidad(100), 0.2);
 });
-caso('50% nubes -> factor 0.5', () => {
-  assert.equal(factorNubosidad(50), 0.5);
+caso('50% nubes -> factor 0.6 (a medio camino entre 1 y el suelo 0.2)', () => {
+  assert.equal(factorNubosidad(50), 0.6);
 });
-caso('valores fuera de rango se recortan a [0,1]', () => {
+caso('valores fuera de rango se recortan a [FACTOR_NUBES_MINIMO, 1]', () => {
   assert.equal(factorNubosidad(-10), 1);
-  assert.equal(factorNubosidad(150), 0);
+  assert.equal(factorNubosidad(150), 0.2);
 });
 
 console.log('\n--- cosIncidencia (§4, ventana vertical) ---');
@@ -349,10 +349,45 @@ caso('T_in por encima de la banda pero sin sol en todo el horizonte -> indiferen
 });
 
 // Mejora post-lanzamiento (2026-08-17, docs/estado.md): mismo cálculo de
-// "próximo cambio" que recomendarVentana, aplicado a la persiana — ahora
-// mismo está nublado y dentro de la banda, pero se despeja con sol fuerte en
-// menos de 1h: sube ahora, pero avisa de cuándo convendrá bajarla.
-caso('nublado y comodo ahora, se despeja con sol fuerte en 45min -> arriba ahora, próximo cambio a bajar', () => {
+// "próximo cambio" que recomendarVentana, aplicado a la persiana — antes
+// del amanecer no hay sol de verdad (elevación negativa, no un problema de
+// nubes) y dentro de la banda, pero amanece con sol fuerte en menos de 1h:
+// sube ahora, pero avisa de cuándo convendrá bajarla.
+//
+// Antes usaba nubesPct=100 para el tramo "sin sol" en vez de elevación
+// negativa — con la corrección del suelo de nubosidad (docs/estado.md,
+// 2026-08-17: 100% de nubes ya no es Q_solar=0 exacto, sigue entrando algo
+// de luz difusa), ese planteamiento dejó de ser "gratis" de verdad y el
+// resultado óptimo pasaba a bajar la persiana desde ya — correcto con la
+// física nueva, pero ya no servía para probar el cálculo de "próximo
+// cambio". Elevación negativa (antes de salir el sol) sigue siendo
+// Q_solar=0 exacto en cualquier caso (iProxy recorta sin(elevación) a 0),
+// así que reproduce el mismo escenario sin depender del suelo de nubes.
+caso('antes del amanecer y comodo, amanece con sol fuerte en 45min -> arriba ahora, próximo cambio a bajar', () => {
+  const antesAmanecer = { elevacion: -5, azimut: 248, nubesPct: 0 };
+  const solFuerte = { elevacion: 40, azimut: 248, nubesPct: 0 };
+  const pronostico = [
+    ...Array.from({ length: 3 }, () => ({ tOut: 23, sol: antesAmanecer })),
+    ...Array.from({ length: 29 }, () => ({ tOut: 32, sol: solFuerte })),
+  ];
+  const estados = {
+    A: { abierta: false, persianaArriba: false },
+    B: { abierta: false, persianaArriba: false },
+  };
+  const r = recomendarPersiana('A', 23, pronostico, estados, piso);
+  console.log(`    accion = ${r.accion}, proximoCambio = ${JSON.stringify(r.proximoCambio)}`);
+  assert.equal(r.accion, 'arriba');
+  assert.ok(r.proximoCambio);
+  assert.equal(r.proximoCambio.accion, 'bajar');
+});
+
+// Caso nuevo (2026-08-17): reemplaza el escenario anterior como prueba de
+// que un cielo 100% cubierto YA NO se trata como "sin sol" — si el resto
+// del horizonte tiene sol fuerte real, bajar la persiana desde ya gana a
+// esperar, porque incluso el tramo nublado aporta algo de calor no deseado
+// (antes, con el suelo de nubosidad a 0, ese tramo era literalmente
+// gratis y el óptimo era esperar).
+caso('100% nubes ya no es "sin sol": con sol fuerte real después, bajar desde ya (no esperar a que "aclare")', () => {
   const solDebil = { elevacion: 40, azimut: 248, nubesPct: 100 };
   const solFuerte = { elevacion: 40, azimut: 248, nubesPct: 0 };
   const pronostico = [
@@ -365,9 +400,7 @@ caso('nublado y comodo ahora, se despeja con sol fuerte en 45min -> arriba ahora
   };
   const r = recomendarPersiana('A', 23, pronostico, estados, piso);
   console.log(`    accion = ${r.accion}, proximoCambio = ${JSON.stringify(r.proximoCambio)}`);
-  assert.equal(r.accion, 'arriba');
-  assert.ok(r.proximoCambio);
-  assert.equal(r.proximoCambio.accion, 'bajar');
+  assert.equal(r.accion, 'bajar');
 });
 
 console.log(`\n${ok} casos OK\n`);

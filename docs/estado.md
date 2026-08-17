@@ -3209,3 +3209,71 @@ abajo.
    `getBoundingClientRect()` antes/después de hacer scroll (se mantiene
    pegada a `clientHeight` en ambos casos) y con una captura de viewport
    normal (no `fullPage`), donde se ve fija abajo como se espera.
+
+### Corrección: 100% de nubes ya no equivale a "sin sol" (2026-08-17)
+
+El usuario, usando la app recién desplegada con datos reales (29.7°C
+fuera, 27.5°C dentro, 100% nublado), le sorprendió que las dos ventanas
+recomendaran subir la persiana con ese percance ("porque si está 100%
+nublado considera que no me da el sol? porque sigue notándose aunque haya
+nubes"). Diagnóstico confirmado leyendo el código antes de tocar nada:
+`factorNubosidad()` (`src/model/irradiancia.js`, Fase 1 decisión 3) era
+una atenuación lineal exacta, `1 − nubesPct/100` — a 100% de nubes daba
+factor 0 exacto, es decir `Q_solar = 0` en cualquier ventana pase lo que
+pase con el sol real. Correcto en la forma general (a más nubes, menos
+sol) pero equivocado en el extremo: un cielo totalmente cubierto real
+sigue dejando pasar luz difusa notable, no es lo mismo que "de noche".
+
+1. **`FACTOR_NUBES_MINIMO = 0.2` (`src/model/constantes.js`), suelo nuevo
+   para la atenuación lineal — no se sustituyó por una curva no lineal
+   tipo Kasten-Czeplak (una alternativa real y más "correcta"
+   físicamente) a propósito.** Se valoraron las dos: la fórmula de
+   irradiancia con nubosidad de Kasten-Czeplak (`1 − 0.75·(nubes/100)^3.4`)
+   es un modelo real y citado en ingeniería solar, pero introduce dos
+   constantes "de manual" (0.75 y 3.4) sin ninguna base ajustada a este
+   piso — rompe con el patrón ya establecido en todo el proyecto de
+   preferir un solo parámetro simple, documentado como "elegido a ojo,
+   pendiente de ajustar con uso real" (mismo criterio que
+   `fraccionVentPersianaBajada`, `VIDA_MEDIA_PASOS`,
+   `UMBRAL_TORMENTA_MM`, etc. — ver decisiones anteriores). Un suelo
+   lineal con un único parámetro (`FACTOR_NUBES_MINIMO`) es igual de
+   fácil de razonar y de retocar más adelante si hace falta.
+   `factorNubosidad(nubesPct) = max(FACTOR_NUBES_MINIMO, 1 −
+   (1−FACTOR_NUBES_MINIMO)·nubesPct/100)` — sigue siendo lineal, sigue
+   dando 1 en 0% de nubes, pero ya no baja de 0.2 en el otro extremo.
+   0.2 (20%) es el orden de magnitud habitual citado para la fracción de
+   irradiancia difusa que atraviesa un cielo muy cubierto (normalmente
+   entre 15% y 30%), no un valor ajustado empíricamente a este piso.
+
+2. **Efecto en cadena real, encontrado corriendo los tests tras el
+   cambio: un caso de prueba existente de "próximo cambio" de persiana
+   dejó de pasar, y result usaba precisamente el bug como parte de su
+   premisa — no un fallo del cambio en sí.** El caso simulaba "nublado y
+   cómodo ahora, se despeja con sol fuerte en 45min" usando
+   `nubesPct: 100` para el tramo "sin sol" — con el suelo nuevo, ese tramo
+   ya no es gratis (aporta algo de calor no deseado, por poco que sea), así
+   que la estrategia óptima pasó de "subir ahora, bajar en 45min" a "bajar
+   ya" — correcto con la física nueva, ya no servía para probar el cálculo
+   de "próximo cambio" en sí. Se sustituyó el tramo "sin sol" por elevación
+   solar negativa (antes del amanecer, `elevacion: -5`) en vez de nubosidad
+   — sigue siendo `Q_solar = 0` exacto en cualquier caso (`iProxy` recorta
+   `sin(elevación)` a 0, no pasa por `factorNubosidad`), así que reproduce
+   el mismo escenario sin depender del suelo de nubes. Se añadió además un
+   caso nuevo que verifica explícitamente el comportamiento corregido: con
+   sol fuerte real más adelante en el horizonte, un tramo de 100% nubes
+   YA NO vale la pena "esperar a que aclare" — baja la persiana desde ya.
+   `test/model.test.js`: 35 casos OK (dos nuevos, uno reescrito), 124 en
+   total en `npm test`.
+
+3. **Verificación con los datos reales que reportó el usuario** (fetch
+   real a Open-Meteo, ubicación/parámetros por defecto, ambas ventanas
+   cerradas con persiana bajada, T_in=27.5°C anotada): antes del cambio,
+   las dos ventanas recomendaban persiana "arriba" (100% nublado ->
+   `Q_solar=0` en las dos, sin motivo para bajarla). Después del cambio,
+   la ventana Suroeste (sol real esa tarde casi de frente, azimut del sol
+   ~227° vs. orientación de la ventana 248°) pasa a recomendar "bajar"
+   (con el suelo de nubosidad ya aporta calor no deseado con T_in ya por
+   encima de la banda); la ventana Noreste (68°, sol al otro lado del
+   edificio en ese momento, `cosIncidencia` recortado a 0 sin importar la
+   nubosidad) se queda igual en "arriba" — coherente con que solo influye
+   la ventana que de verdad puede recibir sol, no las dos por igual.

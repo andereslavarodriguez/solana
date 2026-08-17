@@ -1,15 +1,19 @@
 // Irradiancia proxy y geometría solar respecto a una ventana (spec.md §4)
 
-import { I_MAX } from './constantes.js';
+import { I_MAX, FACTOR_NUBES_MINIMO } from './constantes.js';
 
 export function gradosARadianes(deg) {
   return (deg * Math.PI) / 180;
 }
 
-// Atenuación lineal por nubosidad: 0% nubes -> factor 1, 100% nubes -> factor 0.
+// Atenuación lineal por nubosidad, con suelo (§4). 0% nubes -> factor 1;
+// baja en línea recta hasta FACTOR_NUBES_MINIMO en 100% nubes, en vez de a
+// 0 exacto — corrección real (docs/estado.md, 2026-08-17): con cielo
+// totalmente cubierto sigue entrando luz difusa notable, un 100% de nubes
+// no equivale a "sin sol" para efectos de ganancia solar.
 export function factorNubosidad(nubesPct) {
-  const f = 1 - nubesPct / 100;
-  return Math.max(0, Math.min(1, f));
+  const f = 1 - ((1 - FACTOR_NUBES_MINIMO) * nubesPct) / 100;
+  return Math.max(FACTOR_NUBES_MINIMO, Math.min(1, f));
 }
 
 // cos(ángulo de incidencia) sobre una ventana vertical, a partir de la posición
