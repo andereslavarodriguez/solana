@@ -1,8 +1,9 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-17 (la nubosidad ya no oscurece tanto la
-escena 3D, las sombras se difuminan en su lugar — ver "Nubes: menos
-oscurecimiento, sombras más difusas" al final del documento)
+Última actualización: 2026-08-17 (la farola de madera se separa un poco
+más de la casa y su tabla vertical es más ancha — ver "Farola de madera:
+más separada de la casa, tabla vertical más ancha" al final del
+documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3676,3 +3677,27 @@ casi negra aunque el modelo térmico (con razón, para el cálculo de
    confirmó que los cúmulos se ven claramente más opacos/blancos que
    antes. Verificado también contra `casa.html` con clima real (fetch en
    vivo), sin errores de consola.
+
+### Farola de madera: más separada de la casa, tabla vertical más ancha (2026-08-17)
+
+Pedido explícito, ajuste rápido sobre el diseño del checkpoint 23: "aparta
+un poco el farolillo de la madera de la casa. y ponle la tabla vertical
+más ancha".
+
+1. **`margenFuera` (`construirFarola`) de 1.0 a 1.5** — misma técnica de
+   siempre (esquina real de la habitación + normal hacia fuera), solo más
+   distancia desde esa esquina.
+
+2. **Tabla vertical (`poste`) con su propio ancho de cara,
+   `GROSOR_TABLA_VERTICAL = GROSOR_TABLA * 2`, sin tocar `GROSOR_TABLA`
+   en sí.** `GROSOR_TABLA` sigue siendo el ancho de cara del brazo
+   horizontal y la diagonal (pedido explícito: solo la vertical, no las
+   tres tablas) — se introdujo una constante nueva en vez de ensanchar
+   la compartida para no afectar sin querer a las otras dos piezas.
+
+3. **Verificación:** `npm test`/`npm run build` sin cambios de
+   resultado (cambio íntegro de geometría/posición, ningún módulo
+   testeado). Visual con `scripts/captura-escena3d.mjs` de noche: la
+   farola queda claramente separada de la esquina de la casa, y en un
+   recorte ampliado se distingue la tabla vertical más gruesa que el
+   brazo/la diagonal.

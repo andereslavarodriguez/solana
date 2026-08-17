@@ -1917,7 +1917,9 @@ function construirFarola(geo, dirCamaraXZ, nocturnidadActual, nubesPct) {
   const magEsquina = Math.hypot(esquina.x, esquina.z);
   const nx = esquina.x / magEsquina;
   const nz = esquina.z / magEsquina;
-  const margenFuera = 1.0; // plantado en la hierba, empujado hacia fuera desde la esquina real
+  // 1.0 (checkpoint 23) quedaba demasiado pegada a la casa — pedido
+  // explícito de separarla un poco más, plantada en la hierba.
+  const margenFuera = 1.5;
   const baseX = esquina.x + nx * margenFuera;
   const baseZ = esquina.z + nz * margenFuera;
   // Hacia el centro de la casa (signo opuesto a la normal centro→esquina
@@ -1944,7 +1946,14 @@ function construirFarola(geo, dirCamaraXZ, nocturnidadActual, nubesPct) {
   const ALTURA_POSTE = 0.95 * ESCALA_FAROLA;
   const ESPESOR_TABLA = 0.02 * ESCALA_FAROLA; // grosor de la tabla
   const GROSOR_TABLA = 0.06 * ESCALA_FAROLA; // ancho de cara de la tabla
-  const poste = new THREE.Mesh(new THREE.BoxGeometry(ESPESOR_TABLA, ALTURA_POSTE, GROSOR_TABLA), materialMadera);
+  // La tabla vertical más ancha que el resto (pedido explícito) — solo la
+  // cara de esta pieza, sin tocar `GROSOR_TABLA` (que sigue midiendo el
+  // brazo/diagonal, más finos por diseño).
+  const GROSOR_TABLA_VERTICAL = GROSOR_TABLA * 2;
+  const poste = new THREE.Mesh(
+    new THREE.BoxGeometry(ESPESOR_TABLA, ALTURA_POSTE, GROSOR_TABLA_VERTICAL),
+    materialMadera,
+  );
   poste.position.y = ALTURA_POSTE / 2;
   poste.castShadow = true;
   grupo.add(poste);
