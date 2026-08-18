@@ -1,11 +1,12 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (dos correcciones tras probar en el
-móvil real: el buzón ya no queda incrustado con el árbol, y el editor de
-plano deja margen vacío + admite arrastrar el dedo para dibujar varias
-aristas seguidas — ver "Correcciones tras probar en el móvil real" al
-final del documento. Justo antes, "Editor de plano en cuadrícula: casa
-multi-habitación con paredes/puertas/ventanas": la casa deja de ser una
+Última actualización: 2026-08-18 (bug real corregido: "izquierda" y
+"derecha" estaban intercambiadas al traducir el plano dibujado a la
+escena 3D — ver "Corrección: izquierda y derecha estaban intercambiadas"
+al final del documento. Justo antes, dos correcciones más tras probar en
+el móvil real (buzón incrustado con el árbol, editor de plano poco
+usable) y, antes de esas, "Editor de plano en cuadrícula: casa
+multi-habitación con paredes/puertas/ventanas" — la casa deja de ser una
 habitación rectangular fija con exactamente 2 ventanas)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
@@ -4768,3 +4769,83 @@ workflow de GitHub Pages) en su Android real y reportó dos problemas.
    `fusionarEnTramos` solo miran lo dibujado, nunca `cols`/`filas` en
    sí) — confirmado con captura real de `casa.html` tras guardar. Sin
    errores de consola en ningún caso.
+
+### Corrección: "izquierda" y "derecha" estaban intercambiadas (2026-08-18)
+
+El usuario, tras las correcciones anteriores, reportó algo más concreto:
+"sospecho que la casa se pone en modo espejo en la escena, con el sol y
+todo" — comprobado exhaustivamente (posición solar real vía SunCalc a
+varias horas, proyección real de la cámara con Three.js sobre una forma
+en L asimétrica) y descartado: el sol incide correctamente sobre la
+ventana que le toca según su orientación real, y una pieza dibujada a la
+derecha en el editor SÍ aparece a la derecha en la cámara isométrica fija
+— ver conversación, no quedó anotado como bug porque no lo era.
+
+El reporte definitivo, mucho más preciso, fue: "he hecho una puerta de
+entrada... y nada más entrar a la derecha hay otra puerta. luego en la
+representación 3D resulta que está al entrar a la izquierda" — esta sí
+era una pista con la que reproducir el bug de verdad, porque describe una
+noción de izquierda/derecha distinta de "la de la cámara fija": la de
+**una persona entrando por la puerta**, mirando hacia dentro de la casa.
+
+1. **Bug real confirmado con vectores concretos (Norte/Sur/Este/Oeste,
+   no solo azimuts abstractos), no con la cámara.** Entrando por la
+   fachada frontal (orientacionCasa=N, así que se camina hacia el Sur,
+   mirando hacia dentro), la mano derecha de quien entra apunta al Oeste
+   — que es exactamente `orientacionCasa+270°`, la fachada que
+   `src/model/paredes.js` ya llamaba **'izquierda'** (`OFFSET_PARED.
+   izquierda=270`, sin tocar, siempre correcto). El bug estaba en
+   `src/model/plano.js`, función `clasificarSegmento`: el lado de
+   columna MENOR de la cuadrícula (el que un usuario dibuja a la
+   izquierda del papel, leyendo la cuadrícula con normalidad) se
+   clasificaba como fachada `'izquierda'`, cuando por la cuenta de
+   arriba debía llamarse `'derecha'` — y viceversa. Es decir: el nombre
+   de POSICIÓN EN LA CUADRÍCULA ("columna menor" = visualmente a la
+   izquierda del papel) y el nombre de FACHADA DE LA CASA
+   ("orientacionCasa+90°" = 'derecha') tienen que ser exactamente
+   CONTRARIOS para que la cuenta salga bien — coincidir es lo que causaba
+   el bug.
+
+2. **Por qué la exploración inicial (cámara fija) no lo detectó, y por
+   qué no contradice esta corrección.** "¿Se ve a la derecha de la
+   cámara isométrica lo que dibujé a la derecha del editor?" y "¿está mi
+   mano derecha, entrando por la puerta, donde dibujé la segunda
+   puerta?" son dos preguntas DISTINTAS — la primera depende del ángulo
+   concreto de la cámara fija (45° respecto a la fachada frontal) y
+   puede "parecer" correcta desde un ángulo aunque la orientación
+   interna esté mal (un objeto en espejo, visto desde el ángulo
+   adecuado, no siempre se nota); la segunda es una propiedad topológica
+   pura de la casa (no depende de ningún ángulo de cámara) y es la que de
+   verdad importa para que "izquierda"/"derecha" (usadas también para
+   `obstruccionPorFachada`, spec del proyecto) signifiquen lo que un
+   humano espera.
+
+3. **Arreglo aislado a una única función — nada de física ni de
+   `geometria.js` cambia.** `geometria.js` traduce el nombre de fachada
+   ('izquierda'/'derecha') al signo del vector normal SIN asumir de qué
+   lado de la cuadrícula viene ese nombre — ya era consistente con
+   `paredes.js` independientemente de qué lado clasifique
+   `clasificarSegmento` como cuál. Confirmado explícitamente antes de
+   tocar nada: cambiar solo `clasificarSegmento` (2 palabras) basta, sin
+   tocar `geometria.js` ni `paredes.js` ni la física del modelo térmico
+   (que nunca ha dependido de si algo se llama 'izquierda' o 'derecha',
+   solo de su orientación real en grados, ya siempre correcta).
+   `marcarVentanaMigrada` (migración del piso antiguo) tenía la misma
+   asunción invertida en un `colFija = faceta === 'izquierda' ? 0 :
+   cols` — corregido igual, aunque no afecta al piso real migrado del
+   usuario (sus dos ventanas migran a frontal/trasera exactas, nunca a
+   izquierda/derecha).
+
+4. **Verificación:** `test/plano.test.js` (el caso de la forma en L
+   tenía la asunción antigua incrustada en sus propios asserts — se
+   actualizó para reflejar la corrección, no para maquillarla) — 13
+   casos OK, resto de la suite sin cambios (127→ el mismo número de
+   casos, `test/paredes.test.js` no se tocó porque `orientacionDeFachada`
+   nunca estuvo mal). Verificado de nuevo con vectores concretos tras el
+   cambio: una puerta dibujada en la columna mayor del editor (visualmente
+   a la derecha del papel) ahora coincide exactamente con la mano
+   derecha real de quien entra por la fachada frontal — antes coincidía
+   con la izquierda. `npm test`/`npm run build` sin errores. Visual con
+   Playwright (dispositivo `Pixel 7` emulado): editor y escena 3D sin
+   errores de consola, con el escenario exacto reportado (puerta de
+   entrada + segunda puerta pegada, dibujada a la derecha del papel).
