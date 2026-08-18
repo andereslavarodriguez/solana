@@ -6,6 +6,15 @@
 import assert from 'node:assert/strict';
 import { seleccionarHoras, seleccionarDias, trazadoTemperatura } from '../src/ui/pronosticoExtendido.js';
 
+// Fijo a propósito: los "ahora"/horas de este fichero se escriben como
+// hora LOCAL de Pamplona (mismo supuesto que ya asume toda la app —
+// dispositivo en el mismo huso horario que el piso, ver docs/estado.md
+// Fase 2). Sin esto, el test de "nocturno" da resultados distintos según
+// el huso horario de quien lo ejecute (falló en CI, que corre en UTC,
+// aunque pasaba en local en horario de Madrid) — un bug real del test,
+// no del código que verifica.
+process.env.TZ = 'Europe/Madrid';
+
 let ok = 0;
 function caso(nombre, fn) {
   fn();
