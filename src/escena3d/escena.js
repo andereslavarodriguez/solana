@@ -2790,6 +2790,26 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
   document.addEventListener('visibilitychange', alCambiarVisibilidad);
   animar();
 
+  // Ejes propios de la cámara ("derecha"/"arriba" tal y como se ven en
+  // pantalla), sacados de su matriz de mundo una única vez — la rotación
+  // de la cámara no vuelve a tocarse nunca (ni aquí ni en el paneo de más
+  // abajo, ni siquiera al redimensionar), así que estos dos vectores son
+  // válidos para toda la vida de la escena. `updateMatrixWorld()` hace
+  // falta porque la cámara todavía no se ha renderizado ni una vez en
+  // este punto (matrixWorld empieza como identidad hasta la primera
+  // actualización).
+  camera.updateMatrixWorld();
+  const basisDerecha = new THREE.Vector3();
+  const basisArriba = new THREE.Vector3();
+  camera.matrixWorld.extractBasis(basisDerecha, basisArriba, new THREE.Vector3());
+
+  // Paneo acumulado (arrastre con un dedo), en unidades de mundo a lo
+  // largo de `basisDerecha`/`basisArriba` — se reaplica tal cual tras cada
+  // redimensionar (más abajo) y en cada gesto de paneo nuevo.
+  let panDerecha = 0;
+  let panArriba = 0;
+  const LIMITE_PAN = radio * 0.7;
+
   function redimensionar() {
     const w = contenedor.clientWidth;
     const h = contenedor.clientHeight;
@@ -2799,49 +2819,109 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
     camera.right = nuevaCamara.right;
     camera.top = nuevaCamara.top;
     camera.bottom = nuevaCamara.bottom;
+    // Rotación primero, con la posición SIN panear (igual que en la
+    // construcción inicial) — si se paneara antes de mirar a `objetivo`,
+    // `lookAt` recalcularía el ángulo desde un punto descentrado y el
+    // encuadre isométrico cambiaría un poco en cada resize mientras
+    // hubiera paneo activo. El paneo se reaplica DESPUÉS, como una simple
+    // traslación que no toca la rotación ya fijada.
     camera.position.copy(nuevaCamara.position);
     camera.lookAt(objetivo);
+    camera.position.addScaledVector(basisDerecha, panDerecha);
+    camera.position.addScaledVector(basisArriba, panArriba);
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', redimensionar);
 
-  // Pellizco para hacer zoom en móvil, sin cambiar de ángulo (pedido
-  // explícito) — cámara ortográfica fija, sin OrbitControls (spec.md
-  // §6.1): solo se toca `camera.zoom` (un escalar que Three.js ya aplica
-  // sobre el frustum ya calculado), nunca su posición ni su rotación, así
-  // que el encuadre isométrico nunca cambia de ángulo. `touch-action:
-  // pan-y` (estilo.css) deja que el navegador siga gestionando el scroll
-  // vertical de un dedo (necesario en Inicio, donde la escena es un hero
-  // dentro de una página más larga) pero no reserva el gesto de dos dedos
-  // para su propio zoom de página — así el `touchmove` de dos dedos sí
-  // llega aquí para gestionarlo a mano.
+  // Pellizco para zoom + arrastre con un dedo para paneo, sin cambiar de
+  // ángulo en ningún caso (pedido explícito: "que se pueda mover... no es
+  // un cambio de ángulo") — cámara ortográfica fija, sin OrbitControls
+  // (spec.md §6.1). El zoom solo toca `camera.zoom` (un escalar sobre el
+  // frustum ya calculado); el paneo solo traslada `camera.position` a lo
+  // largo de sus propios ejes derecha/arriba (nunca su rotación) — así se
+  // puede recentrar la vista sobre el árbol, el buzón, etc. sin que la
+  // cámara gire ni un grado. `touch-action: pan-y` (estilo.css) deja que
+  // el navegador siga gestionando el scroll vertical de un dedo donde la
+  // escena es un hero dentro de una página más larga (por si se
+  // reutiliza `#escena3d-hero`), pero no reserva ningún gesto de la
+  // escena para su propio scroll/zoom de página — así los toques llegan
+  // aquí para gestionarlos a mano.
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 3.5;
-  let distanciaPinchInicial = null;
-  let zoomAlEmpezarPinch = camera.zoom;
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  let modoToque = null; // 'pan' | 'pinch' | null
+  let panToquePrevio = null; // {x,y} en píxeles CSS del dedo único
+  let pinchDistanciaInicial = null;
+  let pinchZoomInicial = camera.zoom;
 
   function distanciaEntreDedos(touches) {
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
     return Math.hypot(dx, dy);
   }
+
+  function empezarPan(touch) {
+    modoToque = 'pan';
+    panToquePrevio = { x: touch.clientX, y: touch.clientY };
+  }
+  function empezarPinch(touches) {
+    modoToque = 'pinch';
+    pinchDistanciaInicial = distanciaEntreDedos(touches);
+    pinchZoomInicial = camera.zoom;
+  }
+
   function alEmpezarToque(evento) {
-    if (evento.touches.length === 2) {
-      distanciaPinchInicial = distanciaEntreDedos(evento.touches);
-      zoomAlEmpezarPinch = camera.zoom;
+    if (evento.touches.length === 1) {
+      empezarPan(evento.touches[0]);
+    } else if (evento.touches.length === 2) {
+      empezarPinch(evento.touches);
+    } else {
+      modoToque = null;
     }
   }
   function alMoverToque(evento) {
-    if (evento.touches.length === 2 && distanciaPinchInicial) {
+    if (modoToque === 'pan' && evento.touches.length === 1) {
+      evento.preventDefault();
+      const toque = evento.touches[0];
+      const dxPx = toque.clientX - panToquePrevio.x;
+      const dyPx = toque.clientY - panToquePrevio.y;
+      panToquePrevio = { x: toque.clientX, y: toque.clientY };
+
+      // Píxeles CSS -> unidades de mundo: el ancho/alto visible en mundo
+      // (ya con el zoom actual aplicado) repartido en los píxeles reales
+      // del contenedor.
+      const mundoPorPixelX = (camera.right - camera.left) / camera.zoom / contenedor.clientWidth;
+      const mundoPorPixelY = (camera.top - camera.bottom) / camera.zoom / contenedor.clientHeight;
+      // Arrastrar hacia la izquierda/abajo debe traer contenido de la
+      // derecha/arriba al centro -> la cámara se mueve en la dirección
+      // CONTRARIA al arrastre (mismo criterio que arrastrar un mapa).
+      const nuevoPanDerecha = clamp(panDerecha - dxPx * mundoPorPixelX, -LIMITE_PAN, LIMITE_PAN);
+      const nuevoPanArriba = clamp(panArriba + dyPx * mundoPorPixelY, -LIMITE_PAN, LIMITE_PAN);
+      camera.position.addScaledVector(basisDerecha, nuevoPanDerecha - panDerecha);
+      camera.position.addScaledVector(basisArriba, nuevoPanArriba - panArriba);
+      panDerecha = nuevoPanDerecha;
+      panArriba = nuevoPanArriba;
+    } else if (modoToque === 'pinch' && evento.touches.length === 2) {
       evento.preventDefault();
       const distanciaActual = distanciaEntreDedos(evento.touches);
-      const factor = distanciaActual / distanciaPinchInicial;
-      camera.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomAlEmpezarPinch * factor));
+      const factor = distanciaActual / pinchDistanciaInicial;
+      camera.zoom = clamp(pinchZoomInicial * factor, ZOOM_MIN, ZOOM_MAX);
       camera.updateProjectionMatrix();
     }
   }
   function alSoltarToque(evento) {
-    if (evento.touches.length < 2) distanciaPinchInicial = null;
+    // Al levantar un dedo de un pellizco queda uno solo — retoma el
+    // paneo desde la posición actual de ese dedo (sin salto, sin
+    // recordar de dónde venía el pellizco) en vez de quedarse sin
+    // gestionar nada hasta un gesto completamente nuevo.
+    if (evento.touches.length === 0) {
+      modoToque = null;
+    } else if (evento.touches.length === 1) {
+      empezarPan(evento.touches[0]);
+    } else if (evento.touches.length === 2) {
+      empezarPinch(evento.touches);
+    }
   }
   renderer.domElement.addEventListener('touchstart', alEmpezarToque, { passive: true });
   renderer.domElement.addEventListener('touchmove', alMoverToque, { passive: false });

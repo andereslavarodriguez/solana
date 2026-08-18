@@ -1,9 +1,8 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-17 (feed "Casa" fijo sin scroll, isla más
-arriba, luna/nubes pegadas al borde superior del cielo y pellizco para
-zoom en móvil — ver "Casa sin scroll, isla más arriba, luna/nubes arriba
-del todo, zoom táctil" al final del documento)
+Última actualización: 2026-08-18 (arrastre con un dedo para panear la
+escena 3D, además del pellizco para zoom — ver "Paneo con un dedo" al
+final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3833,3 +3832,63 @@ cambiara el ángulo isométrico fijo.
    con `nubesPct` alto, ni en retrato ni en panorámico), luna dentro de
    encuadre y pegada arriba de noche, y sin errores de consola en ningún
    caso.
+
+### Paneo con un dedo (2026-08-18)
+
+Pedido explícito tras probar el zoom táctil del cambio anterior: el
+pellizco solo acercaba/alejaba siempre sobre el centro de la casa —
+pidió poder desplazar la vista para ver el árbol y el resto de la isla,
+dejando claro que seguía sin querer ningún cambio de ángulo, solo poder
+"hacer zoom en todos lados".
+
+1. **Arrastre con un dedo traslada `camera.position` a lo largo de sus
+   propios ejes derecha/arriba — nunca su rotación, así el ángulo
+   isométrico no cambia en ningún gesto (ni pellizco, ni arrastre, ni
+   redimensionar mientras hay paneo activo).** `basisDerecha`/
+   `basisArriba` se extraen una única vez de `camera.matrixWorld` justo
+   tras construir la cámara (`extractBasis`) — válidos para siempre
+   porque la posición/rotación base de la cámara (`construirCamara`) no
+   depende del aspecto de pantalla, solo su frustum (`left/right/top/
+   bottom`) sí. El arrastre traduce píxeles CSS a unidades de mundo
+   dividiendo el ancho/alto visible actual (`camera.right-camera.left`,
+   ya con el zoom en vigor) entre el tamaño real del contenedor, y mueve
+   la cámara en la dirección CONTRARIA al arrastre (mismo criterio que
+   arrastrar un mapa: el contenido sigue al dedo). El paneo acumulado se
+   guarda (`panDerecha`/`panArriba`) y se recorta a
+   `±radio×0.7` para no poder alejarse de la isla hasta perderla de
+   vista.
+
+2. **Gestión combinada de pellizco (dos dedos) y arrastre (un dedo) en
+   los mismos listeners `touchstart`/`touchmove`/`touchend`, con
+   transición sin salto al pasar de uno a otro.** Al soltar un dedo de un
+   pellizco (quedan uno o cero), o al añadir un segundo dedo en medio de
+   un arrastre, el gesto se re-arranca desde la posición/distancia ACTUAL
+   de los dedos que queden — no desde el punto donde empezó el gesto
+   anterior, que ya no es válido y provocaría un salto visual.
+
+3. **Al redimensionar (`redimensionar()`) con paneo activo, la rotación
+   se fija PRIMERO (con la posición sin panear, `camera.lookAt(objetivo)`)
+   y el paneo se reaplica DESPUÉS como una simple traslación — no antes.**
+   Si se paneara antes de mirar a `objetivo`, `lookAt` recalcularía la
+   rotación desde un punto ya descentrado y el ángulo isométrico
+   cambiaría ligeramente en cada resize mientras hubiera paneo, algo que
+   contradice directamente el pedido explícito de que el ángulo nunca
+   cambie.
+
+4. **`touch-action` de `pan-y` a `none` en el `<canvas>` de la escena
+   (`estilo.css`).** Con `pan-y` el navegador se reservaba el gesto
+   vertical de un dedo para su propio scroll — desde este cambio, un dedo
+   también sirve para panear la escena en cualquier dirección, así que ya
+   no puede quedar ningún eje reservado para el navegador.
+   `#escena3d-hero` (sin ningún consumidor real desde el rediseño móvil
+   de Inicio) comparte la regla por si se reutiliza en el futuro.
+
+5. **Verificación:** `npm test` (127 casos, sin cambios de resultado —
+   cambio íntegro de interacción táctil en la capa impura de
+   `escena3d/`) y `npm run build` sin errores. Funcional con
+   `Input.dispatchTouchEvent` (CDP, Playwright) contra `casa.html`:
+   pellizco de apertura confirma zoom con el ángulo intacto (mismas
+   pendientes de tejado/paredes, solo más grandes — mismo método de
+   verificación que el cambio anterior), y un arrastre de un dedo
+   posterior desplaza de verdad lo que se ve en pantalla (otra esquina de
+   la casa/la isla queda centrada) sin ningún salto ni error de consola.
