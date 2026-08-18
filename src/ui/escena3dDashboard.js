@@ -20,23 +20,17 @@ import { obtenerDatosReales } from '../data/adaptador.js';
 import { montarPronosticoExtendido } from './pronosticoExtendido.js';
 import { cargarParametrosPiso } from '../persistencia/piso.js';
 import { cargarPlano } from '../persistencia/plano.js';
-import { ventanasDelModelo, superficieTotal, cajaEnvolvente } from '../model/plano.js';
 import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { posicionSolar } from '../data/sol.js';
 import { faseLunar } from '../data/luna.js';
 
 export async function montarEscena3D(contenedorEscena, contenedorPronostico, storage) {
-  const piso = cargarParametrosPiso(storage);
-  // Fase 1 de la generalización a cualquier casa (docs/estado.md):
-  // geometria.js todavía asume una única habitación rectangular con
-  // `anchoHabitacion` (se rediseña en la Fase 3 para dibujar la forma real
-  // del plano) — mientras tanto, se le da la caja englobante de la huella
-  // real como aproximación, para que un plano no rectangular al menos se
-  // encuadre razonablemente en vez de fallar.
+  // Fase 3 de la generalización a cualquier casa (docs/estado.md): la
+  // forma de la casa sale directamente del plano en cuadrícula, no de
+  // parametrosPiso — solo se necesita `alturaTecho` de ahí (la altura de
+  // techo no forma parte del plano, que es un dibujo 2D).
   const plano = cargarPlano(storage);
-  piso.ventanas = ventanasDelModelo(plano);
-  piso.superficie = superficieTotal(plano);
-  piso.anchoHabitacion = cajaEnvolvente(plano).ancho;
+  const { alturaTecho } = cargarParametrosPiso(storage);
   const ubicacion = cargarUbicacion(storage);
   const luna = faseLunar(new Date());
 
@@ -65,7 +59,7 @@ export async function montarEscena3D(contenedorEscena, contenedorPronostico, sto
     clima = { precipitacion: 0, codigoTiempo: null, viento: null };
   }
 
-  crearEscena3D(contenedorEscena, piso, sol, clima, luna);
+  crearEscena3D(contenedorEscena, plano, alturaTecho, sol, clima, luna);
   // El fetch de clima es asíncrono, así que el canvas no existe todavía en
   // el primer render de la página — sin esta marca, un script de
   // verificación (o cualquier otro código que espere a que la escena esté

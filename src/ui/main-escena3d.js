@@ -8,7 +8,6 @@ import { crearEscena3D } from '../escena3d/escena.js';
 import { leerOverrideDebug } from '../escena3d/depuracion.js';
 import { cargarParametrosPiso } from '../persistencia/piso.js';
 import { cargarPlano } from '../persistencia/plano.js';
-import { ventanasDelModelo, superficieTotal, cajaEnvolvente } from '../model/plano.js';
 import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { posicionSolar } from '../data/sol.js';
 import { faseLunar } from '../data/luna.js';
@@ -21,14 +20,11 @@ if (override.activo) {
   banner.hidden = false;
 }
 
-const piso = cargarParametrosPiso(window.localStorage);
-// Fase 1 de la generalización a cualquier casa (docs/estado.md): ver el
-// mismo comentario en escena3dDashboard.js — aproximación temporal hasta
-// que geometria.js sepa dibujar la forma real del plano (Fase 3).
+// Fase 3 de la generalización a cualquier casa (docs/estado.md): la forma
+// de la casa sale directamente del plano en cuadrícula, no de
+// parametrosPiso — solo se necesita `alturaTecho` de ahí.
 const plano = cargarPlano(window.localStorage);
-piso.ventanas = ventanasDelModelo(plano);
-piso.superficie = superficieTotal(plano);
-piso.anchoHabitacion = cajaEnvolvente(plano).ancho;
+const { alturaTecho } = cargarParametrosPiso(window.localStorage);
 const ubicacion = cargarUbicacion(window.localStorage);
 
 // El override de depuración es puramente visual (ver docs/estado.md,
@@ -62,7 +58,7 @@ const clima = {
 // controlada por el mismo override de depuración que el resto de la escena.
 const luna = faseLunar(fecha);
 
-crearEscena3D(contenedor, piso, sol, clima, luna);
+crearEscena3D(contenedor, plano, alturaTecho, sol, clima, luna);
 
 document.documentElement.dataset.cargado = 'true';
 

@@ -54,9 +54,10 @@ const OPACIDAD_REFLEJO = 0.5;
 const ANCHO_REFLEJO = 0.06; // m
 const ANGULO_REFLEJO_DEG = 20;
 
-// Offset de azimut de la cámara respecto a la normal de la ventana A, y
-// elevación angular. Punto de partida para el checkpoint 1 — se afina a ojo
-// con la primera captura, no es un valor derivado de ningún dato real.
+// Offset de azimut de la cámara respecto a la orientación de la fachada
+// frontal (plano.orientacionCasa), y elevación angular. Punto de partida
+// para el checkpoint 1 de la Fase 6 — se afina a ojo con la primera
+// captura, no es un valor derivado de ningún dato real.
 const CAMARA_AZIMUT_OFFSET_DEG = 45;
 const CAMARA_ELEVACION_DEG = 35.264; // isométrico clásico (atan(1/√2))
 // 1.6 (checkpoint 1) se quedó holgado de más una vez que la escena incluye
@@ -358,6 +359,12 @@ function construirQuadPlano([p1, p2, p3, p4], material) {
   return new THREE.Mesh(geometria, material);
 }
 
+// Fase 3 (generalización a cualquier casa, ver docs/estado.md):
+// `geo.esquinasSuelo` pasa de un único cuadrilátero a un array de
+// cuadriláteros (uno por celda interior del plano) — la huella ya no es
+// necesariamente un rectángulo simple. Un `THREE.Group` de mallas en vez
+// de una sola, reutilizando `construirQuadPlano` tal cual por celda (sin
+// tocar esa función) y un único material compartido entre todas.
 function construirSuelo(geo) {
   // DoubleSide: evita depender de acertar el orden de bobinado a mano para
   // que la normal salga hacia arriba.
@@ -366,9 +373,13 @@ function construirSuelo(geo) {
     roughness: 1,
     side: THREE.DoubleSide,
   });
-  const malla = construirQuadPlano(geo.esquinasSuelo, material);
-  malla.receiveShadow = true; // recibe la sombra real del marco de ventana
-  return malla;
+  const grupo = new THREE.Group();
+  geo.esquinasSuelo.forEach((quad) => {
+    const malla = construirQuadPlano(quad, material);
+    malla.receiveShadow = true; // recibe la sombra real del marco de ventana
+    grupo.add(malla);
+  });
+  return grupo;
 }
 
 // Techo invisible (pedido explícito): sigue sin dibujarse — vista tipo
@@ -385,16 +396,20 @@ function construirSuelo(geo) {
 // que el techo lo bloquea. Es el mismo efecto que en una habitación real
 // con techo: mancha de sol cerca de la ventana, sombra según se aleja.
 function construirTecho(geo) {
-  const esquinasTecho = geo.esquinasSuelo.map((p) => ({ ...p, y: geo.altura }));
   const material = new THREE.MeshStandardMaterial({
     transparent: true,
     opacity: 0,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  const malla = construirQuadPlano(esquinasTecho, material);
-  malla.castShadow = true;
-  return malla;
+  const grupo = new THREE.Group();
+  geo.esquinasSuelo.forEach((quad) => {
+    const esquinasTecho = quad.map((p) => ({ ...p, y: geo.altura }));
+    const malla = construirQuadPlano(esquinasTecho, material);
+    malla.castShadow = true;
+    grupo.add(malla);
+  });
+  return grupo;
 }
 
 // Nubes (checkpoint 4→5, spec.md §6.1: "nubes cuando hay nubosidad alta") —
@@ -1521,12 +1536,16 @@ const NUM_AGUJEROS_BARRO = 6;
 const RADIO_AGUJERO_MIN = 0.09;
 const RADIO_AGUJERO_MAX = 0.16;
 
-// ¿Cae `(cx, cz)` dentro de la huella real (rotada) de la habitación, con
-// un margen? Proyecta el punto sobre los ejes propios de la habitación
-// (`geo.ejeLateral`/`geo.ejeProfundidad`, no los ejes de mundo — la
-// habitación está rotada al azimut real de la ventana A) y compara con
-// medio ancho/medio profundo. Se usa para que las toperas no puedan salir
-// DENTRO de la casa (pedido explícito, bug real visto en captura).
+// ¿Cae `(cx, cz)` dentro de la CAJA ENGLOBANTE (rotada) de la huella de la
+// casa, con un margen? Proyecta el punto sobre los ejes propios de la casa
+// (`geo.ejeLateral`/`geo.ejeProfundidad`, no los ejes de mundo — la casa
+// está rotada al azimut real de `plano.orientacionCasa`) y compara con
+// medio ancho/medio profundo de esa caja (Fase 3: `geo.anchoLateral`/
+// `geo.profundidad` ya no son los de una única habitación rectangular,
+// sino los de la caja que envuelve la huella real, sea cual sea su forma
+// — esta comprobación pasa a ser conservadora, no exacta, para una huella
+// no rectangular). Se usa para que las toperas no puedan salir DENTRO de
+// la casa (pedido explícito, bug real visto en captura).
 function dentroDeLaHabitacion(cx, cz, geo, margen) {
   const proyLateral = cx * geo.ejeLateral.x + cz * geo.ejeLateral.z;
   const proyProfundidad = cx * geo.ejeProfundidad.x + cz * geo.ejeProfundidad.z;
@@ -1988,15 +2007,18 @@ function construirBuzon(geo) {
 
   grupo.scale.setScalar(ESCALA_BUZON);
 
-  // En una de las 4 esquinas REALES de la habitación (pedido explícito),
-  // no en una posición relativa a la cámara como el primer intento
-  // (que solucionaba "detrás de la pared" pero no era ninguna esquina en
-  // concreto). `geo.esquinasSuelo` ya da las 4 esquinas exactas del
-  // rectángulo de la habitación (mismo sistema rotado que las paredes);
-  // se elige una fija (índice 0, no aleatoria) y se empuja un poco más
-  // hacia fuera en la misma dirección (centro→esquina), para que el
-  // buzón quede claramente en la hierba, no pegado al cristal.
-  const esquina = geo.esquinasSuelo[0];
+  // En una de las 4 esquinas de la CAJA ENGLOBANTE de la casa (pedido
+  // explícito), no en una posición relativa a la cámara como el primer
+  // intento (que solucionaba "detrás de la pared" pero no era ninguna
+  // esquina en concreto). Desde la Fase 3 la huella real ya no es
+  // necesariamente un rectángulo (`geo.esquinasSuelo` es un quad POR
+  // CELDA), así que se usa `geo.esquinasCaja` — las 4 esquinas del
+  // rectángulo que envuelve la huella entera, mismo papel que tenían las
+  // esquinas reales en la Fase 6. Se elige una fija (índice 0, no
+  // aleatoria) y se empuja un poco más hacia fuera en la misma dirección
+  // (centro→esquina), para que el buzón quede claramente en la hierba,
+  // no pegado al cristal.
+  const esquina = geo.esquinasCaja[0];
   const magEsquina = Math.hypot(esquina.x, esquina.z);
   const nx = esquina.x / magEsquina;
   const nz = esquina.z / magEsquina;
@@ -2047,12 +2069,12 @@ function construirFarola(geo, dirCamaraXZ, nocturnidadActual, nubesPct) {
   // Misma técnica que ya usa `construirArbol` para su propia posición:
   // `perp` (perpendicular a la cámara) es el eje a lo largo del cual el
   // árbol se coloca en un lado; la esquina "simétrica" es la de
-  // `geo.esquinasSuelo` (esquinas REALES de la habitación, no una
-  // aproximación) cuya proyección sobre ESE MISMO `perp` es más
+  // `geo.esquinasCaja` (las 4 esquinas de la caja englobante de la huella,
+  // ver construirBuzon) cuya proyección sobre ESE MISMO `perp` es más
   // negativa — el lado contrario al árbol, no un punto cualquiera.
   const perp = { x: -dirCamaraXZ.z, z: dirCamaraXZ.x };
-  const productosPerp = geo.esquinasSuelo.map((esq) => esq.x * perp.x + esq.z * perp.z);
-  const esquina = geo.esquinasSuelo[productosPerp.indexOf(Math.min(...productosPerp))];
+  const productosPerp = geo.esquinasCaja.map((esq) => esq.x * perp.x + esq.z * perp.z);
+  const esquina = geo.esquinasCaja[productosPerp.indexOf(Math.min(...productosPerp))];
   const magEsquina = Math.hypot(esquina.x, esquina.z);
   const nx = esquina.x / magEsquina;
   const nz = esquina.z / magEsquina;
@@ -2687,7 +2709,7 @@ function crearEntornoProcedural(renderer) {
 // src/data/luna.js — {fraccionIluminada, creciente}; los valores por
 // defecto (luna nueva) solo importan si algún día se llama a esta función
 // sin pasarlo, cosa que main-escena3d.js ya no hace.
-export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna = {}) {
+export function crearEscena3D(contenedor, plano, alturaTecho, sol, clima = {}, luna = {}) {
   const { precipitacion = 0, codigoTiempo = null, viento = null } = clima;
   const { fraccionIluminada = 0, creciente = true } = luna;
   const ancho = contenedor.clientWidth || 800;
@@ -2720,11 +2742,14 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
   // envMap solo al material del cristal (construirPared), no globalmente.
   const entorno = crearEntornoProcedural(renderer);
 
-  const geo = calcularGeometria(parametrosPiso);
+  const geo = calcularGeometria(plano, alturaTecho);
 
   // Se necesita antes de construir las paredes, para el offset de los
   // reflejos del cristal (signoHaciaCamara) — no se puede esperar a tener
-  // la cámara ya construida más abajo.
+  // la cámara ya construida más abajo. Desde la Fase 3, `azimutBase` es
+  // directamente `plano.orientacionCasa` (geo.ejeProfundidad ya se deriva
+  // de ahí) — ya no depende de "la primera ventana" como en la Fase 6, es
+  // un parámetro explícito e independiente de cuántas ventanas haya.
   const azimutBase = Math.atan2(geo.ejeProfundidad.x, geo.ejeProfundidad.z) * (180 / Math.PI);
   const dirCamaraXZ = direccionCamaraXZ(azimutCamaraDeg(azimutBase));
   // También se necesita antes de las paredes, para atenuar el reflejo del
