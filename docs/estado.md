@@ -1,9 +1,9 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-17 (la farola de madera se separa un poco
-más de la casa y su tabla vertical es más ancha — ver "Farola de madera:
-más separada de la casa, tabla vertical más ancha" al final del
-documento)
+Última actualización: 2026-08-17 (feed "Casa" fijo sin scroll, isla más
+arriba, luna/nubes pegadas al borde superior del cielo y pellizco para
+zoom en móvil — ver "Casa sin scroll, isla más arriba, luna/nubes arriba
+del todo, zoom táctil" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3701,3 +3701,135 @@ más ancha".
    farola queda claramente separada de la esquina de la casa, y en un
    recorte ampliado se distingue la tabla vertical más gruesa que el
    brazo/la diagonal.
+
+### Casa sin scroll, isla más arriba, luna/nubes arriba del todo, zoom táctil (2026-08-17)
+
+Pedido explícito del usuario probando en el móvil: el feed "Casa" (la
+escena 3D a pantalla completa, ver Fase 6 checkpoint "rediseño de interfaz
+móvil") se podía deslizar aunque no había nada que desplazar; la isla
+seguía baja dentro del encuadre; la luna y las nubes debían verse "arriba
+del todo"; y pidió poder hacer zoom con los dedos en el móvil sin que
+cambiara el ángulo isométrico fijo.
+
+1. **Scroll residual: `100vh` → `100dvh`, más `overflow:hidden` en
+   `body:has(#escena3d)`.** `100vh` en móvil incluye el área que la barra
+   de direcciones del navegador tapa/destapa al hacer scroll — el
+   documento quedaba un poco más alto que la ventana realmente visible en
+   cada momento, así que la página se podía deslizar un poco aunque no
+   hubiera contenido nuevo que ver. `100dvh` se ajusta a la altura visible
+   real. Verificado que el "hueco" que parecía scroll en las primeras
+   pruebas con Playwright era en realidad un artefacto del entorno headless
+   sin emulación móvil real (sin `isMobile`/`hasTouch`, Chromium calcula
+   `dvh` como si aún quedara sitio para una barra de herramientas que en
+   ese contexto no existe) — con un dispositivo emulado de verdad
+   (`devices['iPhone 13']` de Playwright) el hueco desaparece por completo,
+   confirmando que el `dvh` sí resuelve el problema real en un navegador
+   móvil de verdad. Regla nueva `body:has(#escena3d){overflow:hidden;
+   height:100dvh}` (mismo selector `:has()` ya usado para
+   `.nav-inferior`) — no afecta a Inicio (usa `#escena3d-hero`, un id
+   distinto, con scroll normal, sin tocar).
+
+2. **Isla "demasiado abajo": `FACTOR_ARRIBA_RETRATO`/`FACTOR_ABAJO_RETRATO`
+   de 2.2/0.5 a 1.8/0.9 (`construirCamara`, checkpoint 5).** Estos dos
+   factores reparten el mismo total de cielo vertical capturado por la
+   cámara (invariante frente a la proporción elegida — la fórmula de
+   `alcanceVertical` se normaliza sola por la suma de ambos, verificado
+   con álgebra antes de tocar el valor) entre "por encima" y "por debajo"
+   del punto de mira: subir el peso relativo de `abajo` deja más margen
+   bajo la isla y la sube dentro del encuadre, sin tener que recalcular
+   nada más (zoom, proporción horizontal/vertical ya corregida en
+   checkpoint 16, todo eso sigue intacto). Verificado con capturas reales
+   de móvil que la isla queda más arriba sin llegar a perder la premisa
+   original ("casa abajo, cielo arriba").
+
+3. **Bug real encontrado al perseguir "luna/nubes arriba del todo":
+   `TECHO_CIELO_LANDSCAPE` (la constante que limita cuánto puede subir
+   cualquier cosa del cielo — nubes, estrellas, luna) llevaba tiempo
+   proyectando MÁS ALLÁ del borde real de la cámara en modo panorámico, no
+   solo cerca de él.** Diagnosticado exponiendo temporalmente la cámara y
+   la escena en `window` desde `main-escena3d.js` (revertido antes de
+   terminar) y proyectando puntos de prueba con `Vector3.project(camera)`
+   — con `nubesPct` alto, CERO nubes se veían en pantalla ancha; en
+   landscape `alturaMin===alturaMax` (una única altura fija, sin
+   aleatoriedad ninguna), así que si esa altura está mal TODAS las nubes
+   se recortan siempre, no a veces. Causa: `1.15` (el valor de
+   `techoCielo()` para landscape) se calibró en los checkpoints 6-9, antes
+   de que la isla/el árbol/la farola (checkpoints 8-16) empezaran a formar
+   parte de `calcularRadioEscena()` — ese `radio` casi se duplicó desde
+   entonces sin que nadie volviera a comprobar si las nubes seguían
+   cabiendo dentro del encuadre real. Corregido a `0.72` (verificado
+   proyectando con la cámara real que se queda dentro del borde con
+   margen, en varios anchos de pantalla — el resultado no depende del
+   aspecto en landscape, solo del `radio`). La luna nunca estuvo afectada
+   por este bug en sí (su proporción, 0.522, ya la dejaba bastante por
+   debajo del techo real incluso con el techo roto) pero SÍ dependía del
+   mismo `techoCielo()`, así que `PROPORCION_ALTURA_LUNA_LANDSCAPE` se
+   recalculó (0.6/0.72 en vez de 0.6/1.15) para mantener EXACTAMENTE la
+   misma altura absoluta de siempre (0.6×radio) con el denominador ya
+   corregido — la luna no se mueve ni un pixel respecto a antes.
+
+4. **Segundo bug real, específico de retrato y de las nubes: `ANCLAS_NUBE`
+   (las posiciones X/Z fijas de cada cúmulo) también se calibraron con un
+   `radio` mucho menor (checkpoints 4-6), y desde entonces sus fracciones
+   (hasta x=-0.85) ya representaban un desplazamiento mayor que la propia
+   mitad del encuadre horizontal de la cámara — con nubesPct alto, la
+   mayoría de los cúmulos caían fuera de pantalla por el lado, no solo
+   cerca del borde.** Mismo método de diagnóstico (proyección real con
+   `Vector3.project`). `ESCALA_HORIZONTAL_NUBE=0.5` nuevo, aplicado a la
+   posición X/Z de cada cúmulo (no al tamaño del cúmulo en sí, campo
+   `radio` de cada ancla, sin tocar) — verificado con la cámara real en
+   varios aspectos (móvil, cuadrado, panorámico) que el peor caso se queda
+   con margen (~23%) dentro de encuadre.
+
+5. **`techoCielo()` separado en `TECHO_CIELO_LANDSCAPE`/
+   `TECHO_CIELO_PORTRAIT` (antes un único `1.15` compartido) y
+   `PROPORCION_ALTURA_LUNA_LANDSCAPE`/`_PORTRAIT` (antes un único
+   `0.6/1.15`), y `alturaMin` de las nubes también depende de si es
+   retrato — necesario porque, tras corregir el bug del punto 2, mover la
+   isla arriba en retrato (punto 1) reduce el cielo real disponible ahí
+   respecto a landscape, así que un solo valor ya no sirve para ambos.**
+   `TECHO_CIELO_PORTRAIT=0.85` (margen ~6% sobre el borde real de la
+   cámara en retrato, tras el cambio del punto 1).
+   `PROPORCION_ALTURA_LUNA_PORTRAIT=0.95` (la luna casi al límite de
+   `techoCielo`, que a su vez ya tiene su propio margen — pedido explícito
+   de que se vea "arriba del todo"). Nubes en retrato:
+   `FRACCION_BANDA_NUBES_PORTRAIT=0.82` estrecha el rango de altura
+   aleatoria de cada cúmulo a una banda pegada al techo (antes se repartía
+   en todo el hueco entre la altura fija de landscape y el techo real, y
+   la mayoría acababan a media altura). Landscape no cambia de
+   comportamiento (mismo valor `min=max` de siempre, solo con el número ya
+   corregido).
+
+6. **Zoom táctil con dos dedos, sin OrbitControls y sin cambiar el ángulo
+   — solo se toca `camera.zoom` (un escalar de Three.js sobre el frustum
+   ya calculado), nunca la posición ni la rotación de la cámara.** Listener
+   `touchstart`/`touchmove`/`touchend` en `renderer.domElement`
+   (`crearEscena3D`, `escena.js`) que mide la distancia entre los dos
+   dedos y ajusta `camera.zoom` proporcionalmente, con
+   `camera.updateProjectionMatrix()` en cada paso; recortado a
+   `[1, 3.5]` para no alejar más allá del encuadre original ni acercar
+   hasta perder el contexto. `touch-action:pan-y` en el `<canvas>`
+   (`estilo.css`), no `none`: dos dedos ya no disparan el zoom nativo del
+   navegador (que movería el layout entero, no la cámara 3D), pero un
+   dedo sigue pudiendo hacer scroll vertical normal donde la escena es un
+   hero dentro de una página más larga (Inicio, antes de su rediseño;
+   `#escena3d-hero` sigue llevando la misma regla por si se reutiliza).
+   Verificado con `Input.dispatchTouchEvent` (CDP) simulando un pellizco
+   real de apertura en `casa.html`: la escena se acerca visiblemente
+   mientras el ángulo isométrico (las líneas del tejado/las paredes) se
+   mantiene exactamente igual, solo más grande.
+
+7. **Verificación:** `npm test` (127 casos) sin cambios de resultado —
+   todo el trabajo de esta sesión es de la capa impura de `escena3d/`
+   (sin casos de prueba puros, mismo criterio que el resto del fichero
+   desde la Fase 6) y de `estilo.css`. Visual con capturas reales
+   (Playwright + Chromium, dispositivo `iPhone 13` emulado con
+   `hasTouch:true` para el pellizco) contra `casa.html`, `index.html` y la
+   página aislada `escena3d.html` — de día y de noche, retrato y
+   panorámico: sin scroll residual en `casa.html`
+   (`document.documentElement.scrollHeight === innerHeight`), isla más
+   arriba sin cortarse, al menos una nube visible pegada al borde superior
+   del cielo en los cuatro casos (antes de esta sesión no se veía ninguna
+   con `nubesPct` alto, ni en retrato ni en panorámico), luna dentro de
+   encuadre y pegada arriba de noche, y sin errores de consola en ningún
+   caso.

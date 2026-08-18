@@ -480,8 +480,38 @@ const VELOCIDAD_DERIVA_NUBE = 0.05; // rad/s
 // fija de landscape. En landscape (aspecto>=1) el rango colapsa a
 // prácticamente la altura fija de siempre (min≈max), sin cambiar el
 // resultado ya validado.
+//
+// TECHO_CIELO_PORTRAIT (antes compartía el mismo 1.15 que landscape) se
+// separó en su propia constante al mover la isla hacia arriba (ver
+// FACTOR_ARRIBA_RETRATO en construirCamara, pedido explícito: "la isla
+// está demasiado abajo"): ese cambio reduce cuánto cielo real hay por
+// encima del punto de mira en retrato, así que el mismo 1.15 de antes ya
+// se pasaba del borde superior real del encuadre (verificado provisionando
+// una cámara real y proyectando puntos de prueba, no solo a ojo). 0.85 es
+// ~94% del nuevo límite real (con margen para no recortar nada), calculado
+// una vez para cualquier aspecto retrato (la relación entre `techoCielo` y
+// el límite real de la cámara es constante en `aspecto`, ambos escalan
+// igual con `1/aspecto`).
+//
+// TECHO_CIELO_LANDSCAPE (1.15 → 0.72): bug real, preexistente y sin
+// relación con el cambio de retrato de arriba, encontrado al verificar
+// nubes en pantalla ancha con el mismo método (proyectar con la cámara
+// real): con nubesPct alto NINGUNA nube se veía en landscape — en ese
+// modo `alturaMin===alturaMax` (una única altura fija, sin aleatoriedad),
+// así que si esa altura está mal, TODAS las nubes (y el techo del rango de
+// estrellas) se recortan siempre, sin excepción, no a veces. La isla/el
+// árbol/la farola (checkpoints 8-16) fueron agrandando el `radio` que usa
+// esta fórmula desde que 1.15 se calibró (antes de que existieran), sin
+// que nadie volviera a comprobar si las nubes seguían cabiendo — 1.15
+// proyectaba un 55% más allá del borde real de la cámara. 0.72 es el valor
+// seguro (con margen) equivalente al que ya se calculó para retrato,
+// verificado igual con la cámara real en varios anchos de pantalla (el
+// resultado no depende del aspecto en landscape, solo del `radio`, que es
+// el mismo cálculo que ya usa la cámara).
+const TECHO_CIELO_LANDSCAPE = 0.72;
+const TECHO_CIELO_PORTRAIT = 0.85;
 function techoCielo(aspecto) {
-  return aspecto < 1 ? 1.15 / aspecto : 1.15;
+  return aspecto < 1 ? TECHO_CIELO_PORTRAIT / aspecto : TECHO_CIELO_LANDSCAPE;
 }
 
 function construirNubes(nubesPct, objetivo, radio, aspecto) {
@@ -492,8 +522,18 @@ function construirNubes(nubesPct, objetivo, radio, aspecto) {
   // 0 en el umbral, 1 con cielo completamente cubierto — nunca 0 aquí
   // (ya se filtró arriba), así que siempre hay algo de opacidad visible.
   const intensidad = (nubesPct - UMBRAL_NUBES_PCT) / (100 - UMBRAL_NUBES_PCT);
-  const alturaMin = objetivo.y + radio * 1.15;
+  // En landscape, igual que siempre: min=max=1.15 (una única altura fija,
+  // ya validada). En retrato, pedido explícito ("las nubes tienen que verse
+  // arriba del todo"): en vez de repartir las nubes en todo el hueco entre
+  // la altura de landscape y el techo real (la mayoría acababan a media
+  // altura, lejos del borde), se estrecha el rango a una banda pegada al
+  // propio techo — techoCielo(aspecto) ya es el límite seguro (ver arriba).
+  const FRACCION_BANDA_NUBES_PORTRAIT = 0.82;
   const alturaMax = objetivo.y + radio * techoCielo(aspecto);
+  const alturaMin =
+    aspecto < 1
+      ? objetivo.y + radio * techoCielo(aspecto) * FRACCION_BANDA_NUBES_PORTRAIT
+      : objetivo.y + radio * TECHO_CIELO_LANDSCAPE;
   const textura = texturaNube();
   // 0.55-0.95 (checkpoints 5-6) se leía demasiado tenue — pedido explícito
   // ("haz que las nubes se vean más") junto con la corrección de que ya no
@@ -507,14 +547,31 @@ function construirNubes(nubesPct, objetivo, radio, aspecto) {
 
   const anclas = barajar(ANCLAS_NUBE).slice(0, numCumulos);
 
+  // Bug real encontrado al verificar el reencuadre de la isla (más arriba,
+  // FACTOR_ARRIBA_RETRATO): ANCLAS_NUBE se calibró (checkpoints 4-6) frente
+  // a un `radio` bastante menor, antes de que la isla/el árbol/la farola
+  // (checkpoints 8-16) empezaran a formar parte de `calcularRadioEscena` —
+  // ese `radio` casi se ha DUPLICADO desde entonces sin que nadie
+  // reescalara las anclas, así que fracciones como x=-0.85 ya representaban
+  // un desplazamiento mayor que la propia mitad del encuadre horizontal de
+  // la cámara (`alcanceHorizontal≈0.55×radio`): comprobado proyectando las
+  // 5 anclas con la cámara real, con nubesPct alto la mayoría de los
+  // cúmulos quedaban fuera de pantalla (NDC.x por debajo de -1), no solo
+  // cerca del borde. ESCALA_HORIZONTAL_NUBE las trae de vuelta a una
+  // fracción de `radio` segura (verificado con la cámara real en retrato,
+  // cuadrado y panorámico: NDC.x máximo ≈0.77, con margen) sin renunciar a
+  // la disposición relativa entre anclas ya calibrada (esquinas
+  // arriba-izquierda, ver comentario de ANCLAS_NUBE).
+  const ESCALA_HORIZONTAL_NUBE = 0.5;
+
   anclas.forEach(({ x, z, radio: radioRelativo }, i) => {
     // Jitter aleatorio fijo por cúmulo (calculado una vez al construir la
     // escena, no en cada frame — checkpoint 6, "no siempre en el mismo
     // sitio" significa carga a carga, no un temblor continuo).
     const jitterX = (Math.random() * 2 - 1) * AMPLITUD_JITTER_NUBE;
     const jitterZ = (Math.random() * 2 - 1) * AMPLITUD_JITTER_NUBE;
-    const cx = objetivo.x + radio * (x + jitterX);
-    const cz = objetivo.z + radio * (z + jitterZ);
+    const cx = objetivo.x + radio * ESCALA_HORIZONTAL_NUBE * (x + jitterX);
+    const cz = objetivo.z + radio * ESCALA_HORIZONTAL_NUBE * (z + jitterZ);
     const radioCumulo = radio * radioRelativo * escalaCumulo;
     const alturaNubes = alturaMin + Math.random() * (alturaMax - alturaMin);
 
@@ -1121,11 +1178,15 @@ function construirCamara(objetivo, radio, azimutBaseDeg, aspecto) {
   const alcanceBase = radio * CAMARA_MARGEN * 0.6;
   const esRetrato = aspecto < 1;
   const alcanceHorizontal = esRetrato ? alcanceBase : alcanceBase * aspecto;
-  // 2.2 arriba / 0.5 abajo (en vez de 1/1 simétrico): proporción encontrada
-  // a ojo con capturas reales de móvil — deja sitio de sobra para el cielo
-  // sin recortar la habitación por abajo.
-  const FACTOR_ARRIBA_RETRATO = 2.2;
-  const FACTOR_ABAJO_RETRATO = 0.5;
+  // 1.8 arriba / 0.9 abajo (antes 2.2/0.5): la isla quedaba "demasiado
+  // abajo" en móvil (pedido explícito) — más peso relativo hacia `abajo`
+  // sube la isla dentro del encuadre (el punto de mira, más o menos a la
+  // altura de la isla, queda a `abajo/(arriba+abajo)` desde el borde
+  // inferior de la pantalla: antes 0.5/2.7≈18%, ahora 0.9/2.7≈33%), sin
+  // perder la premisa original ("casa abajo, cielo arriba" — sigue habiendo
+  // bastante más cielo que suelo).
+  const FACTOR_ARRIBA_RETRATO = 1.8;
+  const FACTOR_ABAJO_RETRATO = 0.9;
   // Bug real (checkpoint 16, sospecha del usuario confirmada: "cuando se
   // pone en vertical la isla se achata y pierde las proporciones").
   // `alcanceVertical = alcanceBase / aspecto` asumía un frustum SIMÉTRICO
@@ -2355,13 +2416,21 @@ function texturaLuna(fraccionIluminada, creciente) {
 // Ancla horizontal calibrada (ver historial arriba) — compartida con
 // `construirEstrellas` para poder excluir estrellas de encima de la luna.
 const ANCLA_LUNA = { x: -0.15, z: -0.3 };
-// Relación altura/techoCielo ya calibrada en landscape (0.6/1.15) —
-// checkpoint 21 (pedido explícito: "en la vista vertical la luna debería
-// salir en la parte más alta de la pantalla"): la altura fija (0.6) no
-// aprovechaba el sobrante de cielo que `techoCielo(aspecto)` ya reserva
-// en retrato para nubes/estrellas — atada ahora a la misma proporción,
-// sube en retrato exactamente igual que sube el techo del cielo.
-const PROPORCION_ALTURA_LUNA = 0.6 / 1.15;
+// Relación altura/techoCielo ya calibrada en landscape (checkpoint 19-21):
+// la ALTURA ABSOLUTA de la luna (0.6×radio) no cambia aquí — sigue siendo
+// la misma de siempre en pantallas anchas — pero el denominador sí, porque
+// TECHO_CIELO_LANDSCAPE bajó de 1.15 a 0.72 (bug real corregido más
+// arriba); 0.6/0.72 mantiene exactamente esa misma altura absoluta
+// (0.6×radio) con el nuevo denominador, en vez de heredar sin querer un
+// recorte que no tiene nada que ver con la luna. En retrato, pedido
+// explícito ("la luna tiene que verse arriba del todo"): 0.6/1.15 solo
+// dejaba la luna a mitad de camino del cielo disponible, muy lejos del
+// borde superior real — PROPORCION_ALTURA_LUNA_PORTRAIT casi al límite de
+// `techoCielo` (que a su vez ya tiene su propio margen de seguridad frente
+// al borde real de la cámara, ver TECHO_CIELO_PORTRAIT), para que la luna
+// quede pegada arriba sin llegar a recortarse.
+const PROPORCION_ALTURA_LUNA_LANDSCAPE = 0.6 / 0.72;
+const PROPORCION_ALTURA_LUNA_PORTRAIT = 0.95;
 function construirLuna(objetivo, radio, aspecto, fraccionIluminada, creciente, nocturnidadActual) {
   const grupo = new THREE.Group();
   if (nocturnidadActual <= 0) return grupo;
@@ -2377,7 +2446,10 @@ function construirLuna(objetivo, radio, aspecto, fraccionIluminada, creciente, n
   sprite.scale.set(tamaño, tamaño, 1);
   sprite.position.set(
     objetivo.x + radio * ANCLA_LUNA.x,
-    objetivo.y + radio * techoCielo(aspecto) * PROPORCION_ALTURA_LUNA,
+    objetivo.y +
+      radio *
+        techoCielo(aspecto) *
+        (aspecto < 1 ? PROPORCION_ALTURA_LUNA_PORTRAIT : PROPORCION_ALTURA_LUNA_LANDSCAPE),
     objetivo.z + radio * ANCLA_LUNA.z,
   );
   grupo.add(sprite);
@@ -2732,6 +2804,49 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', redimensionar);
+
+  // Pellizco para hacer zoom en móvil, sin cambiar de ángulo (pedido
+  // explícito) — cámara ortográfica fija, sin OrbitControls (spec.md
+  // §6.1): solo se toca `camera.zoom` (un escalar que Three.js ya aplica
+  // sobre el frustum ya calculado), nunca su posición ni su rotación, así
+  // que el encuadre isométrico nunca cambia de ángulo. `touch-action:
+  // pan-y` (estilo.css) deja que el navegador siga gestionando el scroll
+  // vertical de un dedo (necesario en Inicio, donde la escena es un hero
+  // dentro de una página más larga) pero no reserva el gesto de dos dedos
+  // para su propio zoom de página — así el `touchmove` de dos dedos sí
+  // llega aquí para gestionarlo a mano.
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 3.5;
+  let distanciaPinchInicial = null;
+  let zoomAlEmpezarPinch = camera.zoom;
+
+  function distanciaEntreDedos(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+  function alEmpezarToque(evento) {
+    if (evento.touches.length === 2) {
+      distanciaPinchInicial = distanciaEntreDedos(evento.touches);
+      zoomAlEmpezarPinch = camera.zoom;
+    }
+  }
+  function alMoverToque(evento) {
+    if (evento.touches.length === 2 && distanciaPinchInicial) {
+      evento.preventDefault();
+      const distanciaActual = distanciaEntreDedos(evento.touches);
+      const factor = distanciaActual / distanciaPinchInicial;
+      camera.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomAlEmpezarPinch * factor));
+      camera.updateProjectionMatrix();
+    }
+  }
+  function alSoltarToque(evento) {
+    if (evento.touches.length < 2) distanciaPinchInicial = null;
+  }
+  renderer.domElement.addEventListener('touchstart', alEmpezarToque, { passive: true });
+  renderer.domElement.addEventListener('touchmove', alMoverToque, { passive: false });
+  renderer.domElement.addEventListener('touchend', alSoltarToque);
+  renderer.domElement.addEventListener('touchcancel', alSoltarToque);
 
   return { renderer, scene, camera };
 }

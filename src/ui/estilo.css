@@ -44,11 +44,35 @@ a {
 
 #escena3d {
   width: 100vw;
-  height: 100vh;
+  /* dvh, no vh: en móvil vh incluye el área que tapa/destapa la barra de
+     direcciones del navegador al hacer scroll, lo que dejaba el documento
+     ligeramente más alto que la ventana visible y la página se volvía
+     deslizable sin querer (pedido explícito: "el feed casa en el móvil es
+     scrolleable, haz que no lo sea") — dvh se ajusta a la altura visible
+     real en cada momento. */
+  height: 100dvh;
 }
 
-#escena3d canvas {
+#escena3d canvas,
+#escena3d-hero canvas {
   display: block;
+  /* Pellizco para zoom (ver crearEscena3D en escena.js) gestionado a mano
+     sobre `camera.zoom`, nunca sobre su posición/rotación — pan-y en vez
+     de none: dos dedos no disparan el zoom nativo de página (que además
+     movería el layout entero, no la cámara 3D), pero un dedo sigue
+     pudiendo hacer scroll vertical normal en las páginas donde la escena
+     es un hero dentro de una página más larga (Inicio). */
+  touch-action: pan-y;
+}
+
+/* La página "Casa" (rediseño móvil) es la escena 3D a pantalla completa,
+   sin nada más que hacer scroll — evita el scroll residual de móvil
+   descrito arriba también a nivel de documento. No afecta a la página de
+   depuración aislada (escena3d.html, mismo #escena3d): su panel/banner
+   son position:fixed, ajenos al flujo del body. */
+body:has(#escena3d) {
+  overflow: hidden;
+  height: 100dvh;
 }
 
 /* Escena 3D integrada en el dashboard (Fase 6, checkpoint 24): banner
