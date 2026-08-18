@@ -120,8 +120,8 @@ caso('forma en L: huella conectada, y ventanas en 3 fachadas distintas (frontal/
   const segmentos = segmentosPerimetro(cols, filas, dentro);
 
   marcar(segmentos, 'H', 1, 0, 'ventana'); // pared frontal (arriba)
-  marcar(segmentos, 'V', 0, 1, 'ventana'); // col menor -> fachada "derecha" (ver clasificarSegmento)
-  marcar(segmentos, 'V', 2, 2, 'ventana'); // col mayor del tramo bajo -> fachada "izquierda", borde de la L
+  marcar(segmentos, 'V', 0, 1, 'ventana'); // col menor -> fachada "izquierda"
+  marcar(segmentos, 'V', 2, 2, 'ventana'); // col mayor del tramo bajo -> fachada "derecha", borde de la L
   marcar(segmentos, 'V', 2, 3, 'ventana'); // contiguo al anterior -> se funde en un tramo de 2 celdas
 
   const plano = {
@@ -143,21 +143,21 @@ caso('forma en L: huella conectada, y ventanas en 3 fachadas distintas (frontal/
   const ventanas = ventanasDelModelo(plano);
   assert.equal(ventanas.length, 3);
 
-  // orientacionCasa=90 -> frontal=90, trasera=270, izquierda=0, derecha=180
-  // (col menor = fachada "derecha", col mayor = fachada "izquierda" —
-  // bug real corregido, ver docs/estado.md: entrando por la fachada
-  // frontal, la mano derecha de quien entra queda del lado de col menor).
+  // orientacionCasa=90 -> frontal=90, trasera=270, izquierda=180, derecha=0
+  // (derecha=+270°/izquierda=+90° en paredes.js, bug real corregido, ver
+  // docs/estado.md: entrando por la fachada frontal, la mano derecha de
+  // quien entra queda del lado de col MAYOR, no menor).
   const frontal = ventanas.find((v) => v.orientacion === 90);
   assert.ok(frontal);
   assert.equal(frontal.ancho, 0.5);
 
-  const derecha = ventanas.find((v) => v.orientacion === 180);
-  assert.ok(derecha, 'col menor (V(0,1)) debe reconocerse como fachada derecha');
+  const derecha = ventanas.find((v) => v.orientacion === 0);
+  assert.ok(derecha, 'col mayor del tramo bajo de la L (borde) debe reconocerse como fachada derecha');
+  assert.equal(derecha.ancho, 1); // 2 celdas de 0.5m fusionadas en un tramo
   assert.equal(derecha.alturaEdificioEnfrente, 20);
 
-  const izquierda = ventanas.find((v) => v.orientacion === 0);
-  assert.ok(izquierda, 'col mayor del tramo bajo de la L debe reconocerse como fachada izquierda');
-  assert.equal(izquierda.ancho, 1); // 2 celdas de 0.5m fusionadas en un tramo
+  const izquierda = ventanas.find((v) => v.orientacion === 180);
+  assert.ok(izquierda, 'col menor (V(0,1)) debe reconocerse como fachada izquierda');
   assert.equal(izquierda.alturaEdificioEnfrente, 8);
 });
 

@@ -73,7 +73,12 @@ function construirParedDesdeTramo(tramo, punto, altura, ejeProfundidad, ejeLater
   } else {
     p1 = punto(tramo.fijo, tramo.inicio, altura / 2);
     p2 = punto(tramo.fijo, tramo.fin + 1, altura / 2);
-    const signo = tramo.faceta === 'izquierda' ? -1 : 1;
+    // 'derecha' (no 'izquierda'): col menor = fachada "derecha" desde
+    // 2026-08-18 (ver src/model/plano.js#clasificarSegmento y
+    // src/model/paredes.js — los tres tienen que cambiar juntos, un bug
+    // real dejó esto a medias una vez, con la normal de esta fachada
+    // apuntando hacia dentro de la casa en vez de hacia fuera).
+    const signo = tramo.faceta === 'derecha' ? -1 : 1;
     normal = { x: ejeLateral.x * signo, y: 0, z: ejeLateral.z * signo };
   }
 
@@ -112,10 +117,29 @@ export function calcularGeometria(plano, alturaTecho) {
 
   // Un punto de la cuadrícula (esquina de celda: col/fila enteros, no el
   // centro de una celda) a coordenadas de mundo. `fila` crece hacia la
-  // fachada trasera y `col` hacia la derecha (convención fijada en
-  // src/model/plano.js) — de ahí el signo invertido en profundidad.
+  // fachada trasera y `col` hacia la fachada derecha (convención fijada
+  // en src/model/plano.js) — de ahí el signo invertido en AMBOS, no solo
+  // en profundidad.
+  //
+  // Bug real corregido (2026-08-19, ver docs/estado.md): con `lateral =
+  // (col - colCentro)` sin invertir, la traducción de la cuadrícula 2D al
+  // mundo 3D no era una simple rotación, sino una rotación CON UN
+  // ESPEJO — una puerta dibujada a la derecha de la entrada, en el
+  // editor, aparecía a la izquierda de quien entra en la escena 3D (y
+  // viceversa). Un primer intento de arreglo cambió solo qué NOMBRE
+  // recibe cada lado de la cuadrícula (clasificarSegmento) — no sirvió,
+  // porque renombrar una etiqueta no cambia la geometría real que hay
+  // detrás; el espejo seguía ahí, solo que ahora además con la normal de
+  // esas paredes apuntando hacia dentro de la casa. El arreglo de
+  // verdad tenía que ser este: invertir también `lateral`, para que la
+  // transformación completa (columna → lateral, fila → profundidad) sea
+  // una rotación pura, sin ningún espejo — verificado con producto
+  // vectorial (misma orientación de giro en la cuadrícula 2D y en el
+  // mundo 3D visto desde arriba) y con el caso concreto reportado
+  // (entrando por la fachada frontal, la mano derecha de quien entra
+  // coincide con lo dibujado a la derecha del editor).
   function punto(col, fila, y) {
-    const lateral = (col - colCentro) * unidad;
+    const lateral = (colCentro - col) * unidad;
     const profundidad = (filaCentro - fila) * unidad;
     return {
       x: ejeProfundidad.x * profundidad + ejeLateral.x * lateral,

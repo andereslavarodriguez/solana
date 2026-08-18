@@ -23,21 +23,15 @@
 //   }
 //
 // Segmento H(col, fila): arista horizontal entre la celda (col, fila-1)
-// [posición de cuadrícula "arriba", fila menor] y la celda (col, fila)
-// [posición "abajo", fila mayor]. Segmento V(col, fila): arista vertical
-// entre (col-1, fila) [posición "izquierda", col menor] y (col, fila)
-// [posición "derecha", col mayor] — posiciones dentro de la cuadrícula,
-// NO la fachada de la casa (ver más abajo, son lo contrario).
-//
-// Convención de ejes (arbitraria pero fija): fila crece hacia la fachada
-// "trasera". La columna, en cambio, crece hacia la fachada "IZQUIERDA",
-// no "derecha" — bug real corregido (2026-08-18, ver clasificarSegmento):
-// entrando por la fachada frontal, la mano derecha de quien entra apunta
-// hacia el lado de col MENOR, no col mayor. El nombre de la posición en
-// la cuadrícula ("derecha" = col mayor, arriba) y el nombre de la fachada
-// de la casa ("derecha" = orientacionCasa+90°) son cosas distintas que
-// aquí, a propósito, NO coinciden — coincidir habría sido la causa del
-// bug, no la solución.
+// ["arriba", fila menor] y la celda (col, fila) ["abajo", fila mayor].
+// Segmento V(col, fila): arista vertical entre (col-1, fila) ["izquierda"]
+// y (col, fila) ["derecha"]. Convención de ejes (arbitraria pero fija):
+// fila crece hacia la fachada "trasera", columna crece hacia "derecha" —
+// coincide con el nombre de la fachada porque src/escena3d/geometria.js
+// (`punto()`) invierte a propósito el sentido de la columna al pasar a
+// coordenadas de mundo, precisamente para que esta convención simple
+// (col mayor = "derecha", tanto en la cuadrícula como en la fachada) siga
+// dando el resultado físico correcto — ver ese fichero para el porqué.
 
 import { PAREDES, orientacionDeFachada } from './paredes.js';
 
@@ -124,22 +118,24 @@ function clasificarSegmento(segmento, plano, interiorSet) {
   if (!exterior) return { ...segmento, exterior: false, faceta: null };
 
   const ladoExteriorEsMenor = !ladoMenorInterior;
-  // V: bug real reportado por el usuario ("dibujé una puerta a la derecha
-  // de la entrada y en la escena 3D sale a la izquierda") — verificado con
-  // norte/sur/este/oeste concretos, no solo azimuts: entrando por la
-  // fachada frontal (orientacionCasa=N, de cara al Sur hacia dentro), la
-  // mano derecha de quien entra apunta al Oeste, que es exactamente la
-  // fachada a orientacionCasa+270° ('izquierda' en paredes.js). El lado de
-  // col MENOR (`ladoExteriorEsMenor`) tenía que llamarse 'derecha' para
-  // que esa cuenta saliera, no 'izquierda' como estaba.
+  // Vuelta atrás (2026-08-18) de un primer intento de arreglo que
+  // resultó incompleto/equivocado: el bug real de "puerta dibujada a la
+  // derecha sale a la izquierda en 3D" no estaba en qué NOMBRE recibe
+  // cada lado de la cuadrícula (eso solo movía la etiqueta, no la
+  // geometría real, y de paso rompió que la normal de estas paredes
+  // apuntara hacia fuera) — estaba en la fórmula de coordenadas de
+  // src/escena3d/geometria.js (`punto()`), que interpretaba la columna
+  // en el sentido contrario al de la fila. Con esa fórmula ya corregida,
+  // este archivo vuelve a la convención original: col menor = fachada
+  // "izquierda", col mayor = fachada "derecha" (ver docs/estado.md).
   const faceta =
     segmento.tipo === 'H'
       ? ladoExteriorEsMenor
         ? 'frontal'
         : 'trasera'
       : ladoExteriorEsMenor
-        ? 'derecha'
-        : 'izquierda';
+        ? 'izquierda'
+        : 'derecha';
   return { ...segmento, exterior: true, faceta };
 }
 
@@ -394,10 +390,9 @@ function marcarVentanaMigrada(segmentos, faceta, longitudCeldas, cols, filas) {
       encontrar('H', col, filaFija).clase = 'ventana';
     }
   } else {
-    // 'derecha' en col=0, 'izquierda' en col=cols — coherente con el
-    // convenio corregido de clasificarSegmento (ver más abajo): el lado
-    // de col menor es 'derecha', no 'izquierda'.
-    const colFija = faceta === 'derecha' ? 0 : cols;
+    // 'izquierda' en col=0, 'derecha' en col=cols — convención original
+    // de clasificarSegmento (ver más abajo).
+    const colFija = faceta === 'izquierda' ? 0 : cols;
     const longitud = Math.min(longitudCeldas, filas);
     const inicio = Math.floor((filas - longitud) / 2);
     for (let fila = inicio; fila < inicio + longitud; fila++) {

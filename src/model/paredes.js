@@ -9,7 +9,15 @@
 // `orientacionCasa`), en vez de duplicarla en los dos sitios.
 export const PAREDES = ['frontal', 'trasera', 'izquierda', 'derecha'];
 
-const OFFSET_PARED = { frontal: 0, trasera: 180, derecha: 90, izquierda: 270 };
+// derecha=270/izquierda=90 (no 90/270): bug real corregido (2026-08-18,
+// ver docs/estado.md) — entrando por la fachada frontal (mirando hacia
+// dentro), la mano derecha de quien entra apunta a orientacionCasa+270°,
+// no +90°. La primera corrección (solo en plano.js#clasificarSegmento)
+// se quedó a medias: dejaba las paredes de esta fachada con la normal
+// apuntando hacia DENTRO de la casa, porque este offset y el signo usado
+// en escena3d/geometria.js tienen que cambiar los TRES a la vez para
+// seguir siendo consistentes entre sí.
+const OFFSET_PARED = { frontal: 0, trasera: 180, derecha: 270, izquierda: 90 };
 
 export function orientacionDeFachada(orientacionCasa, faceta) {
   return (orientacionCasa + OFFSET_PARED[faceta] + 360) % 360;

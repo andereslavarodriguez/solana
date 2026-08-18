@@ -21,16 +21,20 @@ caso('trasera es la opuesta exacta (180°)', () => {
   assert.equal(orientacionDeFachada(248, 'trasera'), 68);
 });
 
-caso('derecha es +90°', () => {
-  assert.equal(orientacionDeFachada(0, 'derecha'), 90);
+// derecha=+270°/izquierda=+90° (no al revés): bug real corregido
+// (2026-08-19, ver docs/estado.md y src/escena3d/geometria.js) —
+// entrando por la fachada frontal, la mano derecha de quien entra
+// apunta a orientacionCasa+270°, no +90°.
+caso('derecha es +270°', () => {
+  assert.equal(orientacionDeFachada(0, 'derecha'), 270);
 });
 
-caso('izquierda es +270° (-90°)', () => {
-  assert.equal(orientacionDeFachada(0, 'izquierda'), 270);
+caso('izquierda es +90°', () => {
+  assert.equal(orientacionDeFachada(0, 'izquierda'), 90);
 });
 
 caso('normaliza la vuelta completa (orientacionCasa cerca de 360°)', () => {
-  assert.equal(orientacionDeFachada(350, 'derecha'), 80);
+  assert.equal(orientacionDeFachada(350, 'derecha'), 260);
 });
 
 caso('las 4 facetas están todas presentes en PAREDES', () => {

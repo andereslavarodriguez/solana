@@ -1,13 +1,15 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (bug real corregido: "izquierda" y
-"derecha" estaban intercambiadas al traducir el plano dibujado a la
-escena 3D — ver "Corrección: izquierda y derecha estaban intercambiadas"
-al final del documento. Justo antes, dos correcciones más tras probar en
-el móvil real (buzón incrustado con el árbol, editor de plano poco
-usable) y, antes de esas, "Editor de plano en cuadrícula: casa
-multi-habitación con paredes/puertas/ventanas" — la casa deja de ser una
-habitación rectangular fija con exactamente 2 ventanas)
+Última actualización: 2026-08-19 (el espejo real de la casa dibujada
+estaba en la fórmula de coordenadas de geometria.js, no en las etiquetas
+izquierda/derecha como se pensó primero — ver "El espejo de verdad: la
+fórmula de coordenadas, no las etiquetas" al final del documento. Justo
+antes, tres correcciones más tras probar en el móvil real (el primer
+intento de arreglar izquierda/derecha, incompleto; buzón incrustado con
+el árbol; editor de plano poco usable) y, antes de esas, "Editor de
+plano en cuadrícula: casa multi-habitación con paredes/puertas/ventanas"
+— la casa deja de ser una habitación rectangular fija con exactamente 2
+ventanas)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4772,6 +4774,12 @@ workflow de GitHub Pages) en su Android real y reportó dos problemas.
 
 ### Corrección: "izquierda" y "derecha" estaban intercambiadas (2026-08-18)
 
+**Esta corrección resultó incompleta/equivocada — el diagnóstico de
+fondo (izquierda/derecha intercambiadas) era correcto, pero el sitio
+donde se arregló no. Ver "El espejo de verdad: la fórmula de
+coordenadas, no las etiquetas" (2026-08-19) más abajo para la corrección
+real, que revierte el cambio de `clasificarSegmento` descrito aquí.**
+
 El usuario, tras las correcciones anteriores, reportó algo más concreto:
 "sospecho que la casa se pone en modo espejo en la escena, con el sol y
 todo" — comprobado exhaustivamente (posición solar real vía SunCalc a
@@ -4849,3 +4857,88 @@ noción de izquierda/derecha distinta de "la de la cámara fija": la de
    Playwright (dispositivo `Pixel 7` emulado): editor y escena 3D sin
    errores de consola, con el escenario exacto reportado (puerta de
    entrada + segunda puerta pegada, dibujada a la derecha del papel).
+
+### El espejo de verdad: la fórmula de coordenadas, no las etiquetas (2026-08-19)
+
+El usuario probó el despliegue de la corrección anterior y respondió:
+"pues me sigue saliendo igual". Con razón — esa corrección (renombrar
+qué lado de la cuadrícula se llama 'izquierda'/'derecha' en
+`clasificarSegmento`) cambiaba una ETIQUETA, no la GEOMETRÍA real, así
+que no podía arreglar un espejo de verdad. Peor aún: al cambiar la
+etiqueta sin cambiar el signo correspondiente en `geometria.js`, esas
+paredes pasaron a tener la normal apuntando HACIA DENTRO de la casa en
+vez de hacia fuera — una regresión nueva, encontrada verificando nada
+más desplegar (`centro·normal` daba negativo).
+
+1. **Diagnóstico correcto esta vez: la propia función `punto()` de
+   `src/escena3d/geometria.js` (columna/fila de la cuadrícula →
+   coordenadas x/z del mundo) no era una rotación pura, sino una
+   rotación CON UN ESPEJO.** `worldProfundidad` ya invertía el signo de
+   `fila` (necesario, documentado desde la Fase 3); `worldLateral`, en
+   cambio, usaba `col` sin invertir. Tratar un eje con signo invertido y
+   el otro sin invertir es exactamente la definición de una reflexión,
+   no de un giro — verificado formalmente (la matriz de esa
+   transformación tiene determinante -1) y, sobre todo, con el caso
+   físico concreto del usuario: entrando por la fachada frontal (mirando
+   hacia dentro), la mano derecha de quien entra apunta a
+   `orientacionCasa+270°` — con la fórmula sin corregir, la columna
+   MAYOR de la cuadrícula (la que se dibuja a la derecha del editor)
+   caía en `orientacionCasa+90°`, el lado contrario.
+
+2. **Arreglo real: invertir también `worldLateral` en `punto()`** (además
+   de `worldProfundidad`, ya invertido) — con las DOS coordenadas
+   invertidas, la transformación completa vuelve a ser una rotación pura
+   (sin espejo), preservando la disposición real de lo dibujado.
+   Deshecho el cambio de la corrección anterior en
+   `clasificarSegmento`/`marcarVentanaMigrada` (`src/model/plano.js`),
+   que vuelve a su convención original (columna menor = fachada
+   "izquierda", columna mayor = fachada "derecha") — ese archivo nunca
+   tuvo el bug, solo hacía falta que la fórmula de coordenadas fuera
+   consistente con él. Mantenido, en cambio, el ajuste de
+   `OFFSET_PARED` en `src/model/paredes.js` (derecha=+270°/izquierda=+90°,
+   no al revés) y el signo correspondiente en `geometria.js` — estos sí
+   hacía falta cambiarlos, para que la fachada "derecha" (columna mayor,
+   con la fórmula ya corregida) apunte a `orientacionCasa+270°`, que es
+   la definición real de "mano derecha de quien entra por la fachada
+   frontal".
+
+3. **Verificación en dos pasos, no solo uno — la lección de esta ronda
+   es no fiarse de un único tipo de comprobación.** (a) `centro·normal >
+   0` para las 4 fachadas (ninguna normal apunta hacia dentro — la
+   regresión de la corrección anterior, resuelta). (b) El caso físico
+   concreto: entrando por la fachada frontal (mirando hacia el Sur), mi
+   mano derecha real apunta al Oeste (270°) — la ventana dibujada en la
+   columna MAYOR de la cuadrícula (la derecha del editor) ahora da
+   exactamente 270°, la de la columna menor da 90° (mi mano izquierda).
+   Las dos comprobaciones a la vez, no por separado — la corrección
+   anterior fallaba precisamente porque solo se comprobó una cosa
+   (consistencia interna de etiquetas) sin comprobar la física real.
+
+4. **Por qué un producto vectorial "de quiralidad" abstracto NO sirvió
+   como comprobación, y se descartó a propósito.** Se intentó comparar
+   el sentido de giro (horario/antihorario) de 3 puntos en la
+   cuadrícula 2D contra el sentido de giro de esos mismos 3 puntos en el
+   mundo 3D visto "desde arriba" — un método en principio más general
+   que el caso concreto de una sola puerta. Pero esta comparación
+   requiere fijar de antemano una convención arbitraria adicional (¿qué
+   dirección del mundo se considera "arriba de la página" al mirarlo
+   desde el cielo?) que no tiene una respuesta única sin fijar también
+   un punto de vista concreto — exactamente el mismo tipo de ambigüedad
+   que causó ir y venir varias veces en este mismo diagnóstico antes de
+   encontrar el error real. Se abandonó esa vía en cuanto la comprobación
+   física concreta (mano derecha real, mano izquierda real) dio un
+   resultado limpio e inequívoco.
+
+5. **Tests actualizados para reflejar la corrección real (no la
+   incompleta):** `test/paredes.test.js` (derecha=270°/izquierda=90°,
+   antes al revés), `test/plano.test.js` (el caso de la forma en L
+   deshecho a la convención original de `clasificarSegmento`, con los
+   valores de orientación recalculados a partir de los nuevos offsets).
+   127 casos OK en total, sin cambios de cantidad respecto a la
+   corrección anterior (mismos ficheros, valores corregidos). `npm run
+   build` sin errores. Visual con Playwright (mismo escenario exacto del
+   usuario: puerta de entrada + puerta pegada a la derecha del editor)
+   sin errores de consola, y comprobado que el piso migrado del usuario
+   real (sin ninguna ventana izquierda/derecha, solo frontal/trasera) no
+   cambia en absoluto — la sombra/parche de sol a las 17:30 es idéntica
+   a antes de tocar nada de esto.
