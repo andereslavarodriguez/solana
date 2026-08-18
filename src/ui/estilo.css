@@ -1038,7 +1038,10 @@ button.plano-herramienta.activa {
   display: block;
   width: 100%;
   max-width: 32rem;
-  touch-action: manipulation;
+  /* none, no manipulation: arrastrar el dedo sobre la cuadrícula pinta
+     varias aristas seguidas (ver src/ui/plano.js) — no debe competir con
+     el scroll/zoom nativo del navegador durante ese gesto. */
+  touch-action: none;
 }
 
 .plano-guia {

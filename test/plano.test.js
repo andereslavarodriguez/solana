@@ -10,6 +10,7 @@ import {
   validarPlano,
   cajaEnvolvente,
   planoDesdeRectangulo,
+  conMargenGarantizado,
 } from '../src/model/plano.js';
 
 let ok = 0;
@@ -338,6 +339,42 @@ caso('planoDesdeRectangulo: ventanas no exactamente opuestas se asignan a la fac
   assert.equal(ventanas.length, 2);
   assert.ok(ventanas.some((v) => v.orientacion === 10)); // frontal, exacta
   assert.ok(ventanas.some((v) => v.orientacion === 100)); // derecha, exacta (orientacionCasa+90)
+});
+
+caso('conMargenGarantizado: un plano dibujado hasta el borde crece y se desplaza para dejar margen', () => {
+  const cols = 6;
+  const filas = 5;
+  const segmentos = segmentosPerimetro(cols, filas, rectangulo(cols, filas));
+  marcar(segmentos, 'H', 0, 0, 'ventana');
+  const plano = { cols, filas, tamanoCelda: 1, orientacionCasa: 0, segmentos, obstruccionPorFachada: OBSTRUCCION_DE_PRUEBA };
+
+  const conMargen = conMargenGarantizado(plano, 3);
+  assert.equal(conMargen.cols, cols + 6);
+  assert.equal(conMargen.filas, filas + 6);
+  // La forma sigue siendo exactamente la misma casa, solo desplazada.
+  const ventanasAntes = ventanasDelModelo(plano);
+  const ventanasDespues = ventanasDelModelo(conMargen);
+  assert.equal(ventanasDespues.length, ventanasAntes.length);
+  assert.ok(Math.abs(superficieTotal(conMargen) - superficieTotal(plano)) < 0.001);
+  // Y ahora sí hay al menos 3 celdas vacías alrededor por todos los lados.
+  const interior = new Set(celdasInteriores(conMargen).map((c) => `${c.col},${c.fila}`));
+  assert.ok(!interior.has('0,0')); // la esquina de la cuadrícula ya no es parte de la casa
+});
+
+caso('conMargenGarantizado: si ya hay margen de sobra, no cambia nada (idempotente)', () => {
+  const cols = 10;
+  const filas = 10;
+  const segmentos = segmentosPerimetro(cols, filas, rectangulo(4, 4).map((c) => ({ col: c.col + 3, fila: c.fila + 3 })));
+  marcar(segmentos, 'H', 4, 3, 'ventana');
+  const plano = { cols, filas, tamanoCelda: 1, orientacionCasa: 0, segmentos, obstruccionPorFachada: OBSTRUCCION_DE_PRUEBA };
+
+  const resultado = conMargenGarantizado(plano, 2);
+  assert.deepEqual(resultado, plano);
+});
+
+caso('conMargenGarantizado: plano vacío (sin segmentos) se deja tal cual', () => {
+  const plano = { cols: 5, filas: 5, tamanoCelda: 1, orientacionCasa: 0, segmentos: [], obstruccionPorFachada: OBSTRUCCION_DE_PRUEBA };
+  assert.deepEqual(conMargenGarantizado(plano, 3), plano);
 });
 
 console.log(`\n${ok} casos OK (plano.test.js)\n`);

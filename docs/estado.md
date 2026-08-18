@@ -1,10 +1,12 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (la casa deja de ser una habitación
-rectangular fija con exactamente 2 ventanas — ahora se dibuja en un
-editor de plano en cuadrícula, cualquier forma, cualquier número de
-ventanas/puertas/habitaciones — ver "Editor de plano en cuadrícula: casa
-multi-habitación con paredes/puertas/ventanas" al final del documento)
+Última actualización: 2026-08-18 (dos correcciones tras probar en el
+móvil real: el buzón ya no queda incrustado con el árbol, y el editor de
+plano deja margen vacío + admite arrastrar el dedo para dibujar varias
+aristas seguidas — ver "Correcciones tras probar en el móvil real" al
+final del documento. Justo antes, "Editor de plano en cuadrícula: casa
+multi-habitación con paredes/puertas/ventanas": la casa deja de ser una
+habitación rectangular fija con exactamente 2 ventanas)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4685,3 +4687,84 @@ distintas, con su forma real (no un rectángulo) tanto en landscape como
 en retrato; el piso migrado por defecto viéndose igual que antes de
 empezar (mismo parche de sol, misma sombra) antes y después de la
 fusión de mallas del suelo/techo. Sin errores de consola en ningún caso.
+
+### Correcciones tras probar en el móvil real: buzón y facilidad de dibujar el plano (2026-08-18)
+
+El usuario probó el despliegue real (`push` a `main`, disparó el
+workflow de GitHub Pages) en su Android real y reportó dos problemas.
+
+1. **Bug real: el buzón aparecía incrustado con el árbol.**
+   `geo.esquinasCaja` (Fase 3) usaba un orden de esquinas distinto al que
+   tenía `geo.esquinasSuelo` en la Fase 6 — `construirBuzon` sigue
+   leyendo el índice fijo `[0]` tal cual, así que pasó a apuntar a la
+   esquina contraria (`-lateral` en vez de `+lateral`), que resultó caer
+   cerca de donde ya estaba el árbol (posicionado con un criterio
+   distinto, perpendicular a la cámara). Arreglado reordenando
+   `esquinasCaja` para que reproduzca EXACTAMENTE la convención antigua
+   `[(+prof,+lat), (+prof,-lat), (-prof,-lat), (-prof,+lat)]` — verificado
+   con captura del piso real del usuario que el buzón vuelve a quedar
+   separado del árbol, en la posición de siempre.
+
+2. **Editor de plano poco intuitivo: "he dibujado un cuadrado pequeño y
+   se ha puesto dentro de la casa".** Causa real: el plano migrado (y
+   también el plano de referencia para una instalación nueva) llena la
+   cuadrícula de aristas a arista — sin ningún hueco vacío alrededor
+   visible, así que un cuadrado dibujado "al lado" de la casa en
+   realidad caía DENTRO del propio rectángulo ya lleno, partiéndolo en
+   una habitación diminuta en vez de sumar una ampliación. Tres cambios,
+   todos apuntando al mismo pedido explícito ("haz que dibujar paredes
+   sea más fácil"):
+   - **`conMargenGarantizado(plano, margen)`, función pura nueva en
+     `src/model/plano.js`.** Calcula la extensión real de lo ya dibujado
+     y, si no hay al menos `margen` celdas vacías por cada lado dentro de
+     `cols`/`filas`, crece la cuadrícula y desplaza los segmentos lo
+     justo para conseguirlo — idempotente (si ya hay margen de sobra, no
+     toca nada, así que abrir/guardar el editor varias veces seguidas no
+     hace crecer la cuadrícula sin parar). `src/ui/plano.js` la aplica
+     una vez al cargar el plano para editar (`MARGEN_EDITOR = 3`), nunca
+     al guardar — el usuario ve de entrada un margen vacío real alrededor
+     de la casa, sitio evidente donde seguir dibujando.
+   - **Arrastrar el dedo/ratón pinta varias aristas seguidas, no solo
+     tocar una a una.** Pedido explícito ya anticipado como mejora
+     diferida en la Fase 2 ("arrastrar se puede añadir después si
+     resulta tedioso"; llegó el motivo real para hacerlo). Enganchado
+     con `pointerdown`/`pointermove`/`pointerup` — pero con un matiz
+     importante: `render()` reescribe `root.innerHTML` en cada arista
+     pintada (mismo patrón de toda la app), así que un listener puesto
+     en el propio `<svg>` (que se destruye y se reconstruye en cada
+     interacción) se perdería a mitad de un arrastre. Los listeners de
+     movimiento/soltar se enganchan en `root`/`document` (que sí
+     sobreviven a los re-renders), UNA SOLA VEZ, no dentro de
+     `conectarEventos()`. Además, `pointermove` localiza la arista con
+     `document.elementFromPoint(clientX, clientY)` en vez de
+     `evento.target`: en un gesto táctil ya iniciado, algunos
+     navegadores móviles no actualizan `target` según se mueve el dedo
+     (se queda apuntando al elemento donde empezó el toque), así que
+     `evento.target.closest(...)` no habría detectado las aristas
+     nuevas. `touch-action: none` en `.plano-svg` (antes
+     `manipulation`) para que el gesto de dibujar no compita con el
+     scroll/zoom nativo del navegador.
+   - **`MIGRACION_TAMANO_CELDA` de 0.25 a 0.4 m/celda.** Con 0.25 el piso
+     real del usuario migraba a ~475 celdas — celdas de pocos píxeles,
+     casi imposibles de tocar con precisión en un móvil. Con 0.4, ~185
+     celdas — bastante más grandes al tacto, con una pérdida de fidelidad
+     pequeña y ya aceptada a propósito (30m² reales -> 30.72m² migrados,
+     antes 29.7m²; sigue dentro de la tolerancia de
+     `test/plano.test.js`).
+
+3. **Verificación:** 3 casos de prueba nuevos en `test/plano.test.js`
+   para `conMargenGarantizado` (crece y desplaza cuando hace falta,
+   idempotente si ya hay margen, no toca un plano sin segmentos) — 13
+   casos OK en ese fichero, 20 en `escena3d-geometria.test.js` sin
+   cambios de resultado (el reordenamiento de `esquinasCaja` no altera
+   ninguna invariante ya comprobada, solo qué corner cae en qué índice).
+   `npm test`/`npm run build` sin errores. Funcional con Playwright
+   (dispositivo `Pixel 7` emulado, `Input.dispatchTouchEvent` vía CDP
+   para simular un arrastre táctil real): el plano migrado carga con
+   margen vacío real alrededor (cols/filas crecen exactamente lo
+   calculado, 12×16 -> 18×22 con `MARGEN_EDITOR=3`), un único gesto de
+   arrastre pinta varias aristas nuevas de una vez, y guardar un plano
+   con margen no afecta en nada a la escena 3D (`celdasInteriores`/
+   `fusionarEnTramos` solo miran lo dibujado, nunca `cols`/`filas` en
+   sí) — confirmado con captura real de `casa.html` tras guardar. Sin
+   errores de consola en ningún caso.

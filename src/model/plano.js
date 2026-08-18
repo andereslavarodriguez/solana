@@ -202,6 +202,51 @@ export function ventanasDelModelo(plano) {
     }));
 }
 
+// Extensión (en coordenadas de aristas) de todos los segmentos dibujados.
+function extensionSegmentos(segmentos) {
+  let minCol = Infinity;
+  let maxCol = -Infinity;
+  let minFila = Infinity;
+  let maxFila = -Infinity;
+  for (const s of segmentos) {
+    minCol = Math.min(minCol, s.col);
+    maxCol = Math.max(maxCol, s.col);
+    minFila = Math.min(minFila, s.fila);
+    maxFila = Math.max(maxFila, s.fila);
+  }
+  return { minCol, maxCol, minFila, maxFila };
+}
+
+// Garantiza al menos `margen` celdas vacías alrededor de todo lo dibujado
+// (crece cols/filas y desplaza los segmentos si hace falta) — usado por
+// el editor al cargar un plano para editar, nunca al guardar. Sin esto,
+// un plano migrado (o cualquier otro dibujado hasta el borde) no deja
+// sitio visible donde dibujar una ampliación: el usuario solo ve la casa
+// ya hecha, sin ninguna pista de que se puede seguir dibujando alrededor
+// — bug real reportado por el usuario ("he dibujado un cuadrado pequeño y
+// se ha puesto dentro de la casa", porque no había ningún hueco fuera de
+// ella donde cayera). Idempotente: si ya hay margen de sobra (plano ya
+// editado antes), no cambia nada — así abrir y guardar el editor varias
+// veces seguidas no hace crecer la cuadrícula sin parar.
+export function conMargenGarantizado(plano, margen) {
+  if (plano.segmentos.length === 0) return plano;
+
+  const { minCol, maxCol, minFila, maxFila } = extensionSegmentos(plano.segmentos);
+  const faltaIzquierda = Math.max(0, margen - minCol);
+  const faltaArriba = Math.max(0, margen - minFila);
+  const faltaDerecha = Math.max(0, margen - (plano.cols - maxCol));
+  const faltaAbajo = Math.max(0, margen - (plano.filas - maxFila));
+
+  if (!faltaIzquierda && !faltaArriba && !faltaDerecha && !faltaAbajo) return plano;
+
+  return {
+    ...plano,
+    cols: plano.cols + faltaIzquierda + faltaDerecha,
+    filas: plano.filas + faltaArriba + faltaAbajo,
+    segmentos: plano.segmentos.map((s) => ({ ...s, col: s.col + faltaIzquierda, fila: s.fila + faltaArriba })),
+  };
+}
+
 // Componentes conexas de un conjunto de celdas por adyacencia de rejilla
 // (arriba/abajo/izq/dcha), IGNORANDO paredes — dos habitaciones con un
 // muro macizo entre ellas y sin puerta siguen siendo la misma huella de
@@ -277,7 +322,15 @@ export function cajaEnvolvente(plano) {
 // --- Migración desde el modelo anterior a esta fase (parametrosPiso con
 // anchoHabitacion + ventanas fijas en paredes opuestas, Fases 1-8) ---
 
-const MIGRACION_TAMANO_CELDA = 0.25; // m/celda — resolución del plano sintético generado al migrar
+// m/celda — resolución del plano sintético generado al migrar. 0.25
+// (original) daba ~475 celdas para el piso real del usuario, un editor
+// casi imposible de usar con el dedo (celdas de pocos px). Subido a 0.4
+// (bug real reportado en el móvil, "haz que dibujar paredes sea más
+// fácil"): ~185 celdas, celdas más grandes que tocar, sin perder tanta
+// fidelidad como para notarse (con el piso real, 30m² reales -> 30.72m²
+// migrados, frente a 29.7m² con 0.25 — sigue siendo una aproximación
+// aceptada a propósito, no una migración sin pérdida).
+const MIGRACION_TAMANO_CELDA = 0.4;
 
 // A qué fachada relativa corresponde una orientación real dada, cuando
 // `orientacionCasa` es la única referencia disponible (no todas las

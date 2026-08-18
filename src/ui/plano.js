@@ -11,7 +11,7 @@
 // plano inválido a mitad de una edición).
 
 import { cargarPlano, guardarPlano } from '../persistencia/plano.js';
-import { celdasInteriores, superficieTotal, validarPlano } from '../model/plano.js';
+import { celdasInteriores, superficieTotal, validarPlano, conMargenGarantizado } from '../model/plano.js';
 import { PAREDES } from '../model/paredes.js';
 import { validarCampoNumerico, RANGOS } from './validacion.js';
 import { insertarNavInferior } from './navInferior.js';
@@ -22,6 +22,13 @@ import { insertarNavInferior } from './navInferior.js';
 // con el dedo en móvil no falle por unos píxeles.
 const CELL_PX = 22;
 const GROSOR_HIT = 14;
+
+// Celdas vacías garantizadas alrededor de lo ya dibujado al abrir el
+// editor (ver conMargenGarantizado, src/model/plano.js) — bug real
+// reportado en el móvil: sin esto, un plano dibujado hasta el borde (como
+// el migrado del piso real) no deja ningún hueco visible donde ampliar la
+// casa.
+const MARGEN_EDITOR = 3;
 
 const ETIQUETA_FACETA = {
   frontal: 'Frontal',
@@ -38,10 +45,12 @@ const HERRAMIENTAS = [
 ];
 
 export function montarPantallaPlano(root, storage) {
-  const plano = cargarPlano(storage);
+  const plano = conMargenGarantizado(cargarPlano(storage), MARGEN_EDITOR);
   let herramienta = 'muro';
   let mensajeGuardado = '';
   let errores = [];
+  let arrastrando = false;
+  let ultimaArista = null;
 
   function alternarSegmento(tipo, col, fila) {
     const idx = plano.segmentos.findIndex((s) => s.tipo === tipo && s.col === col && s.fila === fila);
@@ -99,13 +108,24 @@ export function montarPantallaPlano(root, storage) {
     root.dataset.cargado = 'true';
   }
 
-  function conectarEventos() {
-    root.querySelector('.plano-svg')?.addEventListener('click', (evento) => {
-      const el = evento.target.closest('[data-tipo]');
-      if (!el) return;
-      alternarSegmento(el.dataset.tipo, Number(el.dataset.col), Number(el.dataset.fila));
-    });
+  // Aplica la herramienta activa a la arista que haya justo debajo de
+  // (clientX, clientY) — usa elementFromPoint en vez de `evento.target`
+  // porque durante un arrastre táctil ya iniciado algunos navegadores NO
+  // actualizan `target` según el dedo se mueve (sí que sigue apuntando al
+  // elemento de partida), así que un simple `evento.target.closest(...)`
+  // en `pointermove` no detectaría las aristas nuevas por las que pasa el
+  // dedo. `ultimaArista` evita repintar la misma arista en cada micro-
+  // movimiento del gesto.
+  function pintarBajoPuntero(clientX, clientY) {
+    const el = document.elementFromPoint(clientX, clientY)?.closest('[data-tipo]');
+    if (!el || !root.contains(el)) return;
+    const clave = `${el.dataset.tipo},${el.dataset.col},${el.dataset.fila}`;
+    if (clave === ultimaArista) return;
+    ultimaArista = clave;
+    alternarSegmento(el.dataset.tipo, Number(el.dataset.col), Number(el.dataset.fila));
+  }
 
+  function conectarEventos() {
     root.querySelectorAll('[data-herramienta]').forEach((boton) => {
       boton.addEventListener('click', () => {
         herramienta = boton.dataset.herramienta;
@@ -131,6 +151,33 @@ export function montarPantallaPlano(root, storage) {
 
     root.querySelector('#btn-guardar-plano')?.addEventListener('click', manejarGuardar);
   }
+
+  // Dibujar arrastrando el dedo/ratón por varias aristas seguidas, no solo
+  // tocar una a una (pedido explícito del usuario: "haz que dibujar
+  // paredes sea más fácil") — enganchado UNA SOLA VEZ, fuera de
+  // conectarEventos(): `render()` reescribe `root.innerHTML` en cada
+  // interacción, así que un listener puesto en el propio `<svg>` (que se
+  // destruye y se vuelve a crear cada vez) se perdería a mitad de un
+  // arrastre. `root` y `document` sí sobreviven a los re-renders.
+  root.addEventListener('pointerdown', (evento) => {
+    if (!evento.target.closest('.plano-svg')) return;
+    evento.preventDefault();
+    arrastrando = true;
+    ultimaArista = null;
+    pintarBajoPuntero(evento.clientX, evento.clientY);
+  });
+  document.addEventListener('pointermove', (evento) => {
+    if (!arrastrando) return;
+    pintarBajoPuntero(evento.clientX, evento.clientY);
+  });
+  document.addEventListener('pointerup', () => {
+    arrastrando = false;
+    ultimaArista = null;
+  });
+  document.addEventListener('pointercancel', () => {
+    arrastrando = false;
+    ultimaArista = null;
+  });
 
   render();
 }

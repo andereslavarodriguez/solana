@@ -145,13 +145,21 @@ export function calcularGeometria(plano, alturaTecho) {
   // Las 4 esquinas de la CAJA ENGLOBANTE de la huella (no de la huella
   // real, que puede tener cualquier forma) — usadas por decoraciones que
   // necesitan "una esquina de la casa" sin importar la silueta exacta
-  // (buzón, farola: ver escena.js). Mismo papel que tenían las 4 esquinas
-  // del rectángulo de la única habitación en la Fase 6.
+  // (buzón, farola: ver escena.js). Mismo orden que tenían las 4 esquinas
+  // del rectángulo de la única habitación en la Fase 6 — (+prof,+lat),
+  // (+prof,-lat), (-prof,-lat), (-prof,+lat) — y no cualquier orden: el
+  // buzón usa el índice 0 fijo, ya calibrado en la Fase 6 para no quedar
+  // pegado al árbol (que se posiciona con un criterio distinto,
+  // perpendicular a la cámara). Bug real de la Fase 3: un orden distinto
+  // aquí desplazó el índice 0 a la esquina contraria (-lat en vez de
+  // +lat), que coincidía casi con la posición del árbol — confirmado en
+  // el móvil real del usuario ("se ha movido el buzón y está incrustado
+  // con el árbol").
   const esquinasCaja = [
-    punto(minCol, minFila, 0),
     punto(maxCol + 1, minFila, 0),
-    punto(maxCol + 1, maxFila + 1, 0),
+    punto(minCol, minFila, 0),
     punto(minCol, maxFila + 1, 0),
+    punto(maxCol + 1, maxFila + 1, 0),
   ];
 
   return {
