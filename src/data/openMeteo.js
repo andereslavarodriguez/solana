@@ -61,18 +61,22 @@ export async function obtenerClimaMinutely15(lat, lon, pasos) {
   return datos.minutely_15;
 }
 
-// Pronóstico extendido (horas cada 3h a 21h vista + 7 días) para el widget
-// estilo Google Weather del dashboard (docs/estado.md) — puramente
-// informativo, no alimenta el modelo térmico (que sigue usando solo
-// obtenerClimaMinutely15/adaptador.js, con su horizonte de 6-8h). Llamada
-// aparte en vez de ensanchar minutely_15: son datos que ningún otro
-// consumidor necesita, y minutely_15 no tiene resolución horaria/diaria.
+// Pronóstico extendido (horas cada 3h + 7 días, con selector de día) para
+// el widget estilo Google Weather del dashboard (docs/estado.md) —
+// puramente informativo, no alimenta el modelo térmico (que sigue usando
+// solo obtenerClimaMinutely15/adaptador.js, con su horizonte de 6-8h).
+// Llamada aparte en vez de ensanchar minutely_15: son datos que ningún
+// otro consumidor necesita, y minutely_15 no tiene resolución
+// horaria/diaria. Sin `forecast_hours` explícito: así `hourly` hereda el
+// mismo `forecast_days=7` que `daily` (confirmado con una petición real
+// que da 168 puntos horarios, uno por hora de los 7 días completos) — el
+// selector de día necesita horas de cualquiera de los 7 días, no solo de
+// las próximas 24h.
 export async function obtenerPronosticoExtendido(lat, lon) {
   const url = new URL(BASE_URL);
   url.searchParams.set('latitude', lat);
   url.searchParams.set('longitude', lon);
   url.searchParams.set('hourly', 'temperature_2m,weather_code');
-  url.searchParams.set('forecast_hours', '24');
   url.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min');
   url.searchParams.set('forecast_days', '7');
   url.searchParams.set('timezone', 'auto');

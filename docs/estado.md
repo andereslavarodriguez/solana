@@ -1,9 +1,11 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (el pronóstico extendido se muda de
-Inicio a la pestaña "Tiempo" — flota traslúcido sobre el cielo de la
-escena 3D, encima de la casa — ver "El pronóstico extendido se muda al
-cielo de Tiempo" al final del documento)
+Última actualización: 2026-08-18 (tres arreglos sobre el pronóstico
+extendido de "Tiempo": el primer punto de horas ahora es la próxima
+marca real de 3h en vez de "ahora+3h"; condiciones actuales en grande
+encima de la línea de temperatura; y los 7 días son seleccionables,
+actualizando la fila de horas al día elegido — ver "Marcador de 3h real,
+condiciones actuales y selector de día" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4242,3 +4244,108 @@ Inicio.
    confirmando que el paneo/zoom de la escena (checkpoints anteriores)
    sigue intacto. Sin errores de consola en ningún caso. Script ad-hoc,
    no committeado.
+
+### Marcador de 3h real, condiciones actuales y selector de día (2026-08-18, misma tarde)
+
+Tres pedidos explícitos tras ver la tarjeta ya flotando sobre el cielo:
+un bug real ("son las 5:45 y el primer punto que sale es a las 21:00,
+debería ser a las 18:00"); añadir encima de la línea de temperatura la
+temperatura actual en grande, con icono, humedad, viento y nubosidad más
+pequeños al lado; y poder seleccionar cada uno de los 7 días para que la
+fila de horas de arriba se actualice a ese día, con el seleccionado
+(hoy por defecto) marcado con un cuadrito verde.
+
+1. **Bug real confirmado con el caso exacto del usuario antes de
+   arreglarlo: `seleccionarHoras` calculaba objetivos como "ahora + i×3h"
+   (17:45+3h=20:45) y luego buscaba el punto horario MÁS CERCANO a ese
+   instante — a las 17:45, el más cercano a 20:45 es 21:00, no 18:00.**
+   El diseño original (misma sesión, unas horas antes) nunca pensó en
+   "próxima marca redonda de 3h", solo en "n×3h de aquí" — funcionaba
+   por casualidad cuando `ahora` ya caía en una marca exacta (como en los
+   tests, que usaban `12:00`), pero no en el caso general. Arreglado con
+   `proximoMarcadorTresHoras(ahora)` (`src/ui/pronosticoExtendido.js`):
+   trunca a la hora en curso y avanza de una en una hasta la primera que
+   sea múltiplo de 3 — siempre estrictamente posterior a `ahora` (si
+   `ahora` cayera justo en una marca, salta a la siguiente, no se queda
+   en la actual). `seleccionarHoras` pasa a generar sus 7 objetivos desde
+   ese marcador (`primerMarcador + i×3h`, i=0..6) en vez de sumar
+   directamente sobre `ahora`.
+
+2. **`seleccionarHorasDelDia(hourly, fecha, lat, lon)`, función nueva —
+   las 8 marcas fijas (00,03,...,21) de un día concreto, sin filtrar por
+   `ahora`.** Necesaria para el selector de día: al elegir un día
+   distinto de hoy, esas 8 marcas ya son todas futuras por construcción
+   (el día entero está por delante), así que no hace falta el concepto
+   de "próximo marcador" que sí necesita "Hoy". `seleccionarHoras`
+   (renombrada internamente su lógica, mismo nombre exportado) sigue
+   siendo la que se usa para "Hoy" — 7 puntos desde el próximo marcador,
+   que puede cruzar la medianoche si quedan pocas horas del día en curso
+   (aceptado a propósito, es literalmente "las próximas 21h"). Ambas
+   comparten `puntoMasCercano()`, extraída como función interna en vez
+   de duplicar la búsqueda de índice más cercano.
+
+3. **`obtenerPronosticoExtendido` (`src/data/openMeteo.js`) pierde el
+   `forecast_hours=24` explícito — bug real de alcance, encontrado al
+   diseñar el selector de día antes de escribirlo, no en producción.**
+   Con `forecast_hours=24` fijo, `hourly` solo cubría las próximas 24h
+   sin importar qué día se seleccionara — `seleccionarHorasDelDia` para
+   el día 3 (o más) simplemente no habría tenido datos de qué buscar.
+   Sin ese parámetro, `hourly` hereda el mismo `forecast_days=7` que ya
+   se pedía para `daily` (confirmado con una petición real: 168 puntos
+   horarios, uno por cada hora de los 7 días completos) — un único
+   fetch ya cubre el horizonte completo que necesita el selector, sin
+   tener que volver a pedir nada a Open-Meteo al cambiar de día.
+
+4. **Condiciones actuales reutilizan el `actual` que ya calcula
+   `escena3dDashboard.js` para la propia escena 3D (Q_solar, sombra,
+   iluminación) — no un tercer fetch.** `montarEscena3D` ya llama a
+   `obtenerDatosReales()` una vez; antes ese resultado solo alimentaba
+   `crearEscena3D`, ahora también se pasa a
+   `montarPronosticoExtendido(contenedor, ubicacion, actual)` como
+   tercer parámetro. Si ese fetch falla, `actual` queda en `null` y
+   `condicionesActualesHtml()` simplemente no dibuja esa franja — el
+   resto de la tarjeta (horas/días) tiene su propio fetch
+   (`obtenerPronosticoExtendido`) y no depende de él en absoluto, mismo
+   criterio de independencia ya establecido cuando se separaron ambos
+   fetches.
+
+5. **`montarPronosticoExtendido` pasa de una función de un solo disparo
+   (fetch → pintar HTML una vez) a dueña de su propio estado
+   (`diaSeleccionado`) con un `render()` interno reutilizable — mismo
+   patrón que `dashboard.js`/`historico.js`.** `hourly`/`daily` quedan en
+   el cierre de la función tras el fetch; cambiar de día NO vuelve a
+   pedir nada a la red, solo recalcula `horas` (con
+   `seleccionarHoras`/`seleccionarHorasDelDia` según si el día elegido es
+   el 0 o no) y reconstruye el HTML. Los botones de día
+   (`.pron-dia-item`) se reenganchan con `addEventListener` después de
+   cada `render()`, igual que ya hace `dashboard.js` con sus
+   interruptores tras cada `root.innerHTML`.
+
+6. **Los días son `<button type="button">`, no `<div>` — necesario para
+   que sean clicables/accesibles, con el mismo problema de
+   especificidad CSS ya documentado varias veces en este fichero
+   (`button.boton-icono`, `button.interruptor`, `button.boton-borrar`):
+   `button[type='button']` (genérico, ya existente) gana por
+   especificidad a una clase sola, así que hace falta calificar con el
+   elemento (`button.pron-dia-item`) para que el padding/border/fondo de
+   aquí ganen.** El día activo (`button.pron-dia-item.pron-dia-activo`,
+   doble clase para ganar también por especificidad y no solo por orden)
+   usa `--acento-fondo` + borde `--acento` — el "cuadradito verde"
+   pedido, mismo tono ya usado en la app para destacar algo sin gritar
+   (pista de recomendación de las tarjetas de ventana, Inicio).
+
+7. **Verificación:** 5 casos de prueba nuevos en
+   `test/pronosticoExtendido.test.js` (`proximoMarcadorTresHoras` en sus
+   3 casos límite — hora suelta, justo en una marca, cruce de
+   medianoche — y `seleccionarHorasDelDia`), 11 casos OK en ese fichero
+   (166 en total en `npm test`), verificado también con `TZ=UTC` a mano
+   para no repetir el fallo de CI de la sesión anterior. `npm run build`
+   sin errores. Visual con Playwright (`iPhone 13`, hora real del
+   sistema ~17:55): primer punto de horas en 18:00 (no 21:00);
+   condiciones actuales "32° · 33% · 17km/h · 0% · 0.0mm" con el sol en
+   grande a la izquierda; clic en el tercer día (Jue) actualiza la fila
+   de horas a las 8 marcas de ese día (00:00 a 21:00, con lunas de
+   madrugada) y lo marca con fondo verde — confirmado también con
+   `getComputedStyle` que el color de fondo del día activo coincide con
+   `--acento-fondo`. Sin errores de consola en ningún caso. Script
+   ad-hoc, no committeado.

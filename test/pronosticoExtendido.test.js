@@ -1,10 +1,16 @@
 // Casos de prueba manuales para las funciones puras de
-// src/ui/pronosticoExtendido.js (selección de horas/días del pronóstico
-// extendido y el trazado SVG de la línea de temperatura) — sin DOM, mismo
-// patrón que test/etiquetaVentana.test.js.
+// src/ui/pronosticoExtendido.js (marcador de 3h, selección de horas/días
+// del pronóstico extendido y el trazado SVG de la línea de temperatura) —
+// sin DOM, mismo patrón que test/etiquetaVentana.test.js.
 
 import assert from 'node:assert/strict';
-import { seleccionarHoras, seleccionarDias, trazadoTemperatura } from '../src/ui/pronosticoExtendido.js';
+import {
+  proximoMarcadorTresHoras,
+  seleccionarHoras,
+  seleccionarHorasDelDia,
+  seleccionarDias,
+  trazadoTemperatura,
+} from '../src/ui/pronosticoExtendido.js';
 
 // Fijo a propósito: los "ahora"/horas de este fichero se escriben como
 // hora LOCAL de Pamplona (mismo supuesto que ya asume toda la app —
@@ -31,7 +37,9 @@ function formatoLocal(fecha) {
   return `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}T${pad(fecha.getHours())}:${pad(fecha.getMinutes())}`;
 }
 
-function hourlyDeserie(inicio, horas, temps, codigos) {
+// Serie horaria (una entrada por hora) desde `inicio` (debe caer en una
+// hora en punto), con temp[i]=temps[i] y weather_code[i]=codigos[i].
+function serieHoraria(inicio, horas, temps, codigos) {
   const time = Array.from({ length: horas }, (_, i) => formatoLocal(new Date(inicio.getTime() + i * 3600 * 1000)));
   return { time, temperature_2m: temps, weather_code: codigos };
 }
@@ -41,46 +49,90 @@ function hourlyDeserie(inicio, horas, temps, codigos) {
 const LAT = 42.8125;
 const LON = -1.6458;
 
+console.log('\n--- proximoMarcadorTresHoras ---');
+
+caso('17:45 -> 18:00 (bug real reportado: "ahora+3h" caía en 20:45 y el punto más cercano salía 21:00)', () => {
+  const marcador = proximoMarcadorTresHoras(new Date('2026-08-18T17:45'));
+  assert.equal(marcador.getDate(), 18);
+  assert.equal(marcador.getHours(), 18);
+  assert.equal(marcador.getMinutes(), 0);
+});
+
+caso('justo en una marca (18:00:00 exacto) -> salta a la SIGUIENTE (21:00), no se queda en la actual', () => {
+  const marcador = proximoMarcadorTresHoras(new Date('2026-08-18T18:00:00'));
+  assert.equal(marcador.getHours(), 21);
+});
+
+caso('cruza la medianoche cuando hace falta (22:10 -> 00:00 del día siguiente)', () => {
+  const marcador = proximoMarcadorTresHoras(new Date('2026-08-18T22:10'));
+  assert.equal(marcador.getDate(), 19);
+  assert.equal(marcador.getHours(), 0);
+});
+
 console.log('\n--- seleccionarHoras ---');
 
-caso('coge 7 puntos, cada uno el más cercano a +3h,+6h,...+21h', () => {
-  const ahora = new Date('2026-08-18T12:00');
-  const temps = Array.from({ length: 24 }, (_, i) => 10 + i);
-  const codigos = Array.from({ length: 24 }, () => 0);
-  const hourly = hourlyDeserie(ahora, 24, temps, codigos);
+caso('el primer punto es el próximo marcador de 3h, no "ahora+3h" (regresión del bug real)', () => {
+  const ahora = new Date('2026-08-18T17:45');
+  const inicio = new Date('2026-08-18T00:00');
+  const temps = Array.from({ length: 48 }, (_, i) => 10 + i);
+  const codigos = Array.from({ length: 48 }, () => 0);
+  const hourly = serieHoraria(inicio, 48, temps, codigos);
   const horas = seleccionarHoras(hourly, ahora, LAT, LON);
   assert.equal(horas.length, 7);
-  assert.equal(horas[0].temp, 13); // índice 3 (ahora+3h) -> 10+3
-  assert.equal(horas[6].temp, 31); // índice 21 (ahora+21h) -> 10+21
+  assert.equal(horas[0].hora.getHours(), 18); // no 21:00, el bug ya corregido
+  assert.equal(horas[0].temp, 28); // índice 18 -> 10+18
+  assert.equal(horas[6].hora.getDate(), 19); // 7º punto cruza a mañana
+  assert.equal(horas[6].hora.getHours(), 12);
 });
 
 caso('mapea el weather_code de cada punto a su categoría', () => {
   const ahora = new Date('2026-08-18T12:00');
+  const inicio = new Date('2026-08-18T00:00');
   const temps = Array.from({ length: 24 }, () => 20);
-  const codigos = Array.from({ length: 24 }, (_, i) => (i === 3 ? 95 : 0));
-  const hourly = hourlyDeserie(ahora, 24, temps, codigos);
+  const codigos = Array.from({ length: 24 }, (_, i) => (i === 15 ? 95 : 0));
+  const hourly = serieHoraria(inicio, 24, temps, codigos);
   const horas = seleccionarHoras(hourly, ahora, LAT, LON);
+  assert.equal(horas[0].hora.getHours(), 15);
   assert.equal(horas[0].categoria, 'tormenta');
   assert.equal(horas[1].categoria, 'despejado');
 });
 
 caso('marca "nocturno" con la elevación solar real (mediodía de agosto en Pamplona)', () => {
-  // ahora=12:00 -> puntos a las 15h,18h,21h,00h,03h,06h,09h. Elevaciones
-  // reales verificadas aparte con posicionSolar(): 15h=58°, 18h=33°,
-  // 21h=0.4° (justo tras la puesta, sigue siendo >0 -> día), 00h=-26°,
-  // 03h=-33°, 06h=-13°, 09h=18°.
+  // ahora=12:00 (ya alineado a la rejilla de 3h) -> puntos en
+  // 15h,18h,21h,00h,03h,06h,09h. Elevaciones reales verificadas aparte con
+  // posicionSolar(): 15h=58°, 18h=33°, 21h=0.4° (justo tras la puesta,
+  // sigue siendo >0 -> día), 00h=-26°, 03h=-33°, 06h=-13°, 09h=18°.
   const ahora = new Date('2026-08-18T12:00');
-  const temps = Array.from({ length: 24 }, () => 20);
-  const codigos = Array.from({ length: 24 }, () => 0);
-  const hourly = hourlyDeserie(ahora, 24, temps, codigos);
+  const inicio = new Date('2026-08-18T00:00');
+  const temps = Array.from({ length: 48 }, () => 20);
+  const codigos = Array.from({ length: 48 }, () => 0);
+  const hourly = serieHoraria(inicio, 48, temps, codigos);
   const horas = seleccionarHoras(hourly, ahora, LAT, LON);
-  assert.equal(horas[0].nocturno, false); // +3h -> 15:00
-  assert.equal(horas[1].nocturno, false); // +6h -> 18:00
-  assert.equal(horas[2].nocturno, false); // +9h -> 21:00
-  assert.equal(horas[3].nocturno, true); // +12h -> 00:00
-  assert.equal(horas[4].nocturno, true); // +15h -> 03:00
-  assert.equal(horas[5].nocturno, true); // +18h -> 06:00
-  assert.equal(horas[6].nocturno, false); // +21h -> 09:00
+  assert.equal(horas[0].nocturno, false); // 15:00
+  assert.equal(horas[1].nocturno, false); // 18:00
+  assert.equal(horas[2].nocturno, false); // 21:00
+  assert.equal(horas[3].nocturno, true); // 00:00
+  assert.equal(horas[4].nocturno, true); // 03:00
+  assert.equal(horas[5].nocturno, true); // 06:00
+  assert.equal(horas[6].nocturno, false); // 09:00
+});
+
+console.log('\n--- seleccionarHorasDelDia ---');
+
+caso('devuelve las 8 marcas fijas (00,03,...,21) del día dado, sin depender de "ahora"', () => {
+  const inicio = new Date('2026-08-19T00:00');
+  const temps = Array.from({ length: 24 }, (_, i) => 10 + i);
+  const codigos = Array.from({ length: 24 }, () => 0);
+  const hourly = serieHoraria(inicio, 24, temps, codigos);
+  const fechaDia = new Date('2026-08-19T00:00');
+  const horas = seleccionarHorasDelDia(hourly, fechaDia, LAT, LON);
+  assert.equal(horas.length, 8);
+  assert.deepEqual(
+    horas.map((h) => h.hora.getHours()),
+    [0, 3, 6, 9, 12, 15, 18, 21],
+  );
+  assert.equal(horas[0].temp, 10);
+  assert.equal(horas[7].temp, 31); // índice 21 -> 10+21
 });
 
 console.log('\n--- seleccionarDias ---');

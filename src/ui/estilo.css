@@ -486,11 +486,56 @@ button.boton-borrar:hover {
   gap: 0.5rem;
 }
 
-.pronostico-extendido.pron-cargando,
-.pronostico-extendido.pron-error {
+.pron-mensaje {
+  margin: 0;
   color: var(--texto-suave);
   font-size: 0.9rem;
-  padding: 0.7rem 0.9rem;
+  padding: 0.1rem 0.3rem;
+}
+
+/* Condiciones actuales — grande la temperatura, pequeño el resto
+   (humedad/viento/nubosidad/lluvia), pedido explícito. Reutiliza el
+   `actual` que ya trae obtenerDatosReales() para la escena 3D
+   (escena3dDashboard.js) en vez de un tercer fetch. */
+.pron-actual {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--borde);
+}
+
+.pron-actual-icono svg {
+  width: 2.1rem;
+  height: 2.1rem;
+  color: var(--acento-oscuro);
+}
+
+.pron-actual-temp {
+  font-family: var(--tipo-titular);
+  font-size: 2.1rem;
+  line-height: 1;
+  color: var(--texto);
+}
+
+.pron-actual-detalles {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 0.15rem 0.7rem;
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--texto-suave);
+}
+
+.pron-actual-detalles span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pron-actual-detalles svg {
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 .pron-horas {
@@ -559,6 +604,33 @@ button.boton-borrar:hover {
 .pron-dia-temps strong {
   color: var(--texto);
   font-weight: 600;
+}
+
+/* Días seleccionables: la fila de horas de arriba se actualiza al tocar
+   uno (pedido explícito). `button.pron-dia-item` (no solo la clase):
+   misma necesidad de igualar la especificidad de `button[type='button']`
+   ya documentada varias veces en este fichero (ver .boton-icono/
+   .boton-borrar/.interruptor) — sin el selector de elemento, su
+   padding/border/background genéricos ganarían. */
+button.pron-dia-item {
+  border: none;
+  background: transparent;
+  padding: 0.3rem 0.15rem;
+  border-radius: 0.6rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* El "cuadradito verde" pedido explícito, para saber de un vistazo qué
+   día se está viendo — mismo tono que ya usa el resto de la app para
+   destacar algo sin gritar (--acento-fondo, ver la pista de
+   recomendación de las tarjetas de ventana). Doble clase (más
+   específico que button.pron-dia-item solo) para que gane por
+   especificidad, no solo por orden. */
+button.pron-dia-item.pron-dia-activo {
+  background: var(--acento-fondo);
+  border: 1px solid var(--acento);
 }
 
 .fila-clima {

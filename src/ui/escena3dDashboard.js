@@ -10,20 +10,14 @@
 // forma que ya produce `obtenerDatosReales` para el modelo térmico
 // (`actual.sol` ya trae {elevacion, azimut, nubesPct}) sirve tal cual como
 // `sol` de `crearEscena3D`, sin repetir el cálculo con `posicionSolar` por
-// separado salvo en el fallback de error.
-//
-// También monta el pronóstico extendido (docs/estado.md, "widget estilo
-// Google Weather") flotando sobre el cielo de la escena — pedido explícito
-// de moverlo aquí desde Inicio, donde quedaba abajo del todo; "en el
-// cielo, encima de la casa" es justo el hueco vacío que deja esta escena.
-// Fetch propio e independiente del de la escena (`montarPronosticoOverlay`,
-// más abajo): un fallo o una tardanza ahí no debe retrasar ni tumbar la
-// construcción de la escena 3D, que es el elemento central de la pantalla.
+// separado salvo en el fallback de error. Ese mismo `actual` se reutiliza
+// también como condiciones actuales del pronóstico extendido
+// (`montarPronosticoExtendido`, src/ui/pronosticoExtendido.js) — que flota
+// sobre el cielo de esta escena — en vez de pedirlo dos veces.
 
 import { crearEscena3D } from '../escena3d/escena.js';
 import { obtenerDatosReales } from '../data/adaptador.js';
-import { obtenerPronosticoExtendido } from '../data/openMeteo.js';
-import { seleccionarHoras, seleccionarDias, pronosticoExtendidoHtml } from './pronosticoExtendido.js';
+import { montarPronosticoExtendido } from './pronosticoExtendido.js';
 import { cargarParametrosPiso } from '../persistencia/piso.js';
 import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { posicionSolar } from '../data/sol.js';
@@ -36,8 +30,10 @@ export async function montarEscena3D(contenedorEscena, contenedorPronostico, sto
 
   let sol;
   let clima;
+  let actual = null;
   try {
-    const { actual } = await obtenerDatosReales(ubicacion.lat, ubicacion.lon);
+    const datos = await obtenerDatosReales(ubicacion.lat, ubicacion.lon);
+    actual = datos.actual;
     sol = actual.sol;
     clima = {
       precipitacion: actual.precipitacion,
@@ -48,7 +44,10 @@ export async function montarEscena3D(contenedorEscena, contenedorPronostico, sto
     // Sin clima en vivo, la escena se construye igualmente con la posición
     // solar real (no depende de red) y condiciones neutras — mismo criterio
     // que el default de estadoVentanas.js (Fase 5): mejor un estado neutro
-    // sin datos que una escena rota o ausente.
+    // sin datos que una escena rota o ausente. `actual` se queda en null:
+    // el pronóstico extendido simplemente no dibuja su franja de
+    // condiciones actuales (ver condicionesActualesHtml), el resto de la
+    // tarjeta (horas/días) tiene su propio fetch y no depende de esto.
     console.error(error);
     sol = { ...posicionSolar(new Date(), ubicacion.lat, ubicacion.lon), nubesPct: 0 };
     clima = { precipitacion: 0, codigoTiempo: null, viento: null };
@@ -63,23 +62,6 @@ export async function montarEscena3D(contenedorEscena, contenedorPronostico, sto
   contenedorEscena.dataset.cargado = 'true';
 
   if (contenedorPronostico) {
-    montarPronosticoOverlay(contenedorPronostico, ubicacion);
+    montarPronosticoExtendido(contenedorPronostico, ubicacion, actual);
   }
-}
-
-async function montarPronosticoOverlay(contenedor, ubicacion) {
-  contenedor.innerHTML = pronosticoExtendidoHtml('cargando', null);
-  try {
-    const { hourly, daily } = await obtenerPronosticoExtendido(ubicacion.lat, ubicacion.lon);
-    const ahora = new Date();
-    const datos = {
-      horas: seleccionarHoras(hourly, ahora, ubicacion.lat, ubicacion.lon),
-      dias: seleccionarDias(daily),
-    };
-    contenedor.innerHTML = pronosticoExtendidoHtml('ok', datos);
-  } catch (error) {
-    console.error(error);
-    contenedor.innerHTML = pronosticoExtendidoHtml('error', null);
-  }
-  contenedor.dataset.cargado = 'true';
 }
