@@ -328,43 +328,57 @@ function construirReflejosCristal(pared, signoCamara, factorSol) {
   });
 }
 
-// Quad plano horizontal a partir de 4 esquinas en espacio de mundo (no un
-// PlaneGeometry alineado a los ejes del mundo + rotación: la habitación
-// está rotada al azimut real de la ventana A, y un plano sin rotar dejaba
-// huecos/salientes en las esquinas frente a las paredes).
+// Suelo/techo horizontales a partir de N cuadriláteros en espacio de mundo
+// (uno por celda interior del plano, Fase 3 — la huella ya no es
+// necesariamente un rectángulo simple, así que ya no basta un único quad).
+// No un PlaneGeometry alineado a los ejes del mundo + rotación: la casa
+// está rotada al azimut real de `orientacionCasa`, y un plano sin rotar
+// dejaba huecos/salientes en las esquinas frente a las paredes.
 //
-// Geometría INDEXADA (4 vértices únicos + índice [0,1,2, 0,2,3]), no 6
-// vértices sueltos duplicados en dos triángulos separados: con vértices
-// duplicados, aunque tengan la misma normal calculada, seguía viéndose una
-// costura diagonal de esquina a esquina (más visible cuanto más contraste
-// de luz/sombra había) — algo de precisión/redondeo entre las dos copias
-// "iguales" del vértice compartido. Con índice de verdad ambos triángulos
-// comparten el mismo vértice en memoria, no dos copias distintas: no hay
-// nada que pueda desalinearse. computeVertexNormals() sobre esta versión
-// indexada promedia correctamente en el vértice compartido — antes
-// (checkpoint 1) se probó computeVertexNormals() sin indexar y sí se veía
-// una costura, pero esa era la causa (vértices duplicados), no el cálculo
-// de normales en sí.
-function construirQuadPlano([p1, p2, p3, p4], material) {
-  const vertices = new Float32Array([
-    p1.x, p1.y, p1.z,
-    p2.x, p2.y, p2.z,
-    p3.x, p3.y, p3.z,
-    p4.x, p4.y, p4.z,
-  ]);
+// TODOS los quads se funden en una única BufferGeometry indexada (Fase 4,
+// pulido de rendimiento — ver docs/estado.md): con el plano migrado por
+// defecto de un usuario real (tamanoCelda=0.25m, ~475 celdas) construir
+// una malla de Three.js POR CELDA daba ~950 mallas solo para suelo+techo,
+// muchas más que todo el resto de la escena junto (isla, nubes, lluvia,
+// viento) — un coste de draw calls innecesario para geometría 100%
+// estática que nunca cambia tras crear la escena. Un solo mesh con todos
+// los triángulos ya indexados es idéntico visualmente y muchísimo más
+// barato.
+//
+// Cada celda aporta 4 vértices propios (no reutiliza los de la celda de
+// al lado, aunque compartan esquina): más simple que deduplicar vértices
+// entre celdas contiguas, y el coste extra de memoria es insignificante
+// para las cantidades de celdas reales de esta app. Dentro de cada celda,
+// misma técnica ya usada desde la Fase 6 (índice [0,1,2, 0,2,3], no 6
+// vértices sueltos): con vértices duplicados DENTRO de un mismo quad se
+// veía una costura diagonal por precisión/redondeo entre las dos copias
+// del vértice compartido; con índice de verdad ambos triángulos de esa
+// celda comparten el mismo vértice en memoria.
+function construirQuadsFusionados(quads, material) {
+  const vertices = new Float32Array(quads.length * 4 * 3);
+  const indices = new Array(quads.length * 6);
+  quads.forEach((quad, i) => {
+    const base = i * 4;
+    quad.forEach((p, j) => {
+      vertices[(base + j) * 3] = p.x;
+      vertices[(base + j) * 3 + 1] = p.y;
+      vertices[(base + j) * 3 + 2] = p.z;
+    });
+    const idx = i * 6;
+    indices[idx] = base;
+    indices[idx + 1] = base + 1;
+    indices[idx + 2] = base + 2;
+    indices[idx + 3] = base;
+    indices[idx + 4] = base + 2;
+    indices[idx + 5] = base + 3;
+  });
   const geometria = new THREE.BufferGeometry();
   geometria.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-  geometria.setIndex([0, 1, 2, 0, 2, 3]);
+  geometria.setIndex(indices);
   geometria.computeVertexNormals();
   return new THREE.Mesh(geometria, material);
 }
 
-// Fase 3 (generalización a cualquier casa, ver docs/estado.md):
-// `geo.esquinasSuelo` pasa de un único cuadrilátero a un array de
-// cuadriláteros (uno por celda interior del plano) — la huella ya no es
-// necesariamente un rectángulo simple. Un `THREE.Group` de mallas en vez
-// de una sola, reutilizando `construirQuadPlano` tal cual por celda (sin
-// tocar esa función) y un único material compartido entre todas.
 function construirSuelo(geo) {
   // DoubleSide: evita depender de acertar el orden de bobinado a mano para
   // que la normal salga hacia arriba.
@@ -373,13 +387,9 @@ function construirSuelo(geo) {
     roughness: 1,
     side: THREE.DoubleSide,
   });
-  const grupo = new THREE.Group();
-  geo.esquinasSuelo.forEach((quad) => {
-    const malla = construirQuadPlano(quad, material);
-    malla.receiveShadow = true; // recibe la sombra real del marco de ventana
-    grupo.add(malla);
-  });
-  return grupo;
+  const malla = construirQuadsFusionados(geo.esquinasSuelo, material);
+  malla.receiveShadow = true; // recibe la sombra real del marco de ventana
+  return malla;
 }
 
 // Techo invisible (pedido explícito): sigue sin dibujarse — vista tipo
@@ -402,14 +412,10 @@ function construirTecho(geo) {
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  const grupo = new THREE.Group();
-  geo.esquinasSuelo.forEach((quad) => {
-    const esquinasTecho = quad.map((p) => ({ ...p, y: geo.altura }));
-    const malla = construirQuadPlano(esquinasTecho, material);
-    malla.castShadow = true;
-    grupo.add(malla);
-  });
-  return grupo;
+  const quads = geo.esquinasSuelo.map((quad) => quad.map((p) => ({ ...p, y: geo.altura })));
+  const malla = construirQuadsFusionados(quads, material);
+  malla.castShadow = true;
+  return malla;
 }
 
 // Nubes (checkpoint 4→5, spec.md §6.1: "nubes cuando hay nubosidad alta") —

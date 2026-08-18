@@ -1,8 +1,10 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (isla más arriba en el encuadre y
-paleta de colores más viva/menos grisácea en la escena 3D — ver "Isla
-más arriba y colores más vivos" al final del documento)
+Última actualización: 2026-08-18 (la casa deja de ser una habitación
+rectangular fija con exactamente 2 ventanas — ahora se dibuja en un
+editor de plano en cuadrícula, cualquier forma, cualquier número de
+ventanas/puertas/habitaciones — ver "Editor de plano en cuadrícula: casa
+multi-habitación con paredes/puertas/ventanas" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4467,3 +4469,219 @@ escena. haz que los colores sean más vivos, se ve demasiado grisáceo".
    despejado, 90-100% de nubes, noche) y con un script ad-hoc contra
    `casa.html` con datos reales (no committeado) — sin errores de consola
    en ningún caso.
+
+### Editor de plano en cuadrícula: casa multi-habitación con paredes/puertas/ventanas (2026-08-18)
+
+El usuario quiso poder usar la app para cualquier casa, no solo la suya
+("querría hacer que la app pudiera ser para cualquier casa en vez de
+solo para la mía"). Primer planteamiento (una habitación rectangular con
+hasta 4 ventanas, una por pared) se descartó en la misma conversación:
+"¿y costaría mucho poner paredes? podría quedar muy bien... estaría bien
+hacerlo de alguna forma que el usuario pueda 'dibujar' los planos de su
+casa... imagina un piso de tres habitaciones, dos baños, un salón, y una
+cocina" — pedido explícito de un editor de plano en cuadrícula estilo Los
+Sims, con paredes interiores y puertas, aunque el modelo térmico siga
+siendo de una sola zona (confirmado explícitamente por el usuario: "el
+modelo térmico no tenga en cuenta todo esto... esta bien que salgan en la
+escena para que al usuario le parezca realmente su casa"). Se planificó
+con `EnterPlanMode` (plan aprobado tras dos rondas: una descartada por el
+propio usuario, la segunda con este alcance) y se construyó en 4 fases,
+cada una commiteada por separado con `npm test`/`npm run build` en verde.
+
+**Investigación previa clave (antes de tocar código):** tres agentes
+`Explore` confirmaron que el modelo térmico, el motor de recomendación,
+la recalibración y el gemelo en vivo YA generalizaban a un array de
+ventanas de longitud arbitraria — nunca asumían "A"/"B" ni 2 elementos.
+El bloqueo real estaba concentrado en `src/escena3d/geometria.js`
+(`const [ventanaA, ventanaB] = parametrosPiso.ventanas`, ignoraba
+`ventanaB.orientacion` y forzaba la pared B como opuesta geométrica
+exacta de A — un bug de raíz, no solo una limitación) y en el formulario
+de `src/ui/parametros.js` (`leerFormulario` leía `[0, 1].map(...)` sin
+importar cuántas ventanas hubiera). Esto acotó el trabajo real a la capa
+3D y a la UI, no al modelo físico — confirmado, cero cambios en
+`src/model/termico.js`/`sombra.js`/`irradiancia.js`/`recomendacion.js`/
+`gemelo.js`/`recalibracion.js` en las 4 fases.
+
+**Diseño de datos — `src/model/plano.js` (nuevo módulo puro, Fase 0).**
+Las paredes viven en las ARISTAS de una cuadrícula (estilo Los Sims), no
+en las celdas: el usuario solo dibuja paredes/puertas/ventanas; qué
+celdas quedan "dentro de la casa" se deriva por flood fill desde un
+"fuera" virtual que rodea la cuadrícula (`celdasInteriores`) — nunca se
+pinta una habitación aparte. Una puerta bloquea el flood fill igual que
+un muro (sigue siendo parte de la envolvente real del edificio, solo con
+un hueco para pasar) — solo importa si HAY o no un segmento, no de qué
+clase es. `fusionarEnTramos` agrupa segmentos consecutivos de la misma
+línea recta con la misma clase/clasificación en un único "tramo" — así
+una ventana real de ~2m (varios segmentos contiguos marcados 'ventana')
+se trata como una sola ventana, no como varias diminutas, y de paso
+reduce el número de mallas 3D. `ventanasDelModelo(plano)` produce
+exactamente la forma de objeto que ya consumía el modelo desde la Fase 1
+del proyecto original (`{nombre, orientacion, ancho,
+alturaEdificioEnfrente, distanciaEdificioEnfrente}`) — único punto de
+integración entre el plano y el resto del modelo.
+
+`src/model/paredes.js` centraliza la conversión entre "faceta" de un
+tramo (frontal/trasera/izquierda/derecha, relativa a la rotación de la
+casa) y su orientación real en grados de brújula:
+`orientacionDeFachada(orientacionCasa, faceta)`. `orientacionCasa`
+(nuevo campo, grados) es la única fuente de la rotación de toda la
+cuadrícula — sustituye el papel que tenía `ventanaA.orientacion` en el
+sistema anterior, pero como parámetro explícito e independiente de
+cualquier ventana concreta. Convención de ejes fijada una sola vez
+(arbitraria pero consistente): la fila de la cuadrícula crece hacia la
+fachada "trasera", la columna hacia la "derecha".
+
+**Simplificaciones deliberadas, confirmadas con el usuario o decididas
+por consistencia con el resto del proyecto:**
+- **Obstrucción de edificios enfrente: 4 valores por fachada
+  (frontal/trasera/izquierda/derecha), no uno por ventana individual.**
+  Pedirlo por cada tramo de ventana en un editor de cuadrícula sería
+  mucha fricción; casi siempre el contexto urbano es el mismo para todas
+  las ventanas de un mismo lado del edificio.
+- **Puerta = hueco en la pared, sin geometría propia de marco/hoja.**
+  Decorativo del todo (el modelo térmico no la usa en absoluto), más
+  barato — un tramo `clase:'puerta'` se filtra antes de construir
+  paredes (`geometria.js`), así que esa pared simplemente no aparece.
+- **Una sola huella conectada, un solo piso.** `validarPlano` exige
+  huella conectada (BFS por adyacencia de celdas, ignorando paredes —
+  dos habitaciones con un muro macizo sin puerta siguen siendo el mismo
+  edificio) y al menos una ventana exterior; nada de patios interiores
+  ni edificios exentos sueltos en v1.
+- **Sin límite explícito de ventanas por pared** — a diferencia del
+  primer plan descartado (máx. 1 por pared), el sistema de tramos
+  fusionados generaliza solo: cualquier número de segmentos 'ventana'
+  contiguos o separados por muro en la misma línea se traduce en otras
+  tantas ventanas independientes, sin ningún caso especial.
+- **Editor v1: clic celda a celda en cada arista**, sin arrastrar para
+  pintar una línea de una vez — más simple de implementar bien a la
+  primera.
+- **Cámara: mismo ángulo isométrico fijo de siempre
+  (`orientacionCasa + 45°`), sin detección de auto-oclusión.** Con una
+  silueta muy irregular (forma de U con el patio interior orientado
+  hacia un lado desfavorable respecto a la cámara) el ángulo fijo puede
+  dejar ese rincón bastante oculto — confirmado a propósito en la Fase 4
+  con una U así (ver más abajo) y aceptado como límite conocido de v1.
+
+**Fase 1 — Persistencia (`src/persistencia/plano.js`) + migración.**
+Mismo patrón `storage` inyectado que `piso.js`. Sin plano guardado
+todavía, si hay datos del esquema anterior (`parametrosPiso.ventanas` +
+`anchoHabitacion`) se migran con `planoDesdeRectangulo()` (pura, en
+`model/plano.js`) a un plano rectangular equivalente — resolución de
+cuadrícula fija en 0.25m/celda (`MIGRACION_TAMANO_CELDA`), cada ventana
+antigua asignada a la fachada relativa más cercana angularmente
+(`facetaMasCercana`, por si alguna vez no eran exactamente opuestas).
+Con el piso real del usuario (248°/68°, exactamente opuestas) la
+migración reproduce el resultado visual anterior casi exacto (superficie
+dentro de ~1.5m² de los 30m² originales — el redondeo a la resolución de
+cuadrícula es una aproximación aceptada a propósito, no una migración
+sin pérdida). `dashboard.js`/`historico.js`/la integración de la escena
+3D inyectaban `ventanasDelModelo(plano)`/`superficieTotal(plano)` sobre
+el `piso` cargado en vez de tocar la lógica interna de esos ficheros —
+shim temporal, cerrado del todo en la Fase 3 (ver más abajo).
+
+**Fase 2 — Editor (`plano.html` + `src/ui/plano.js`).** Cuadrícula SVG
+clicable (elegida sobre `<canvas>` por hit-testing/estilos más simples:
+cada arista es un `<g>` con un `<rect>` invisible más ancho que el trazo
+visual como área de clic, más fácil de acertar con el dedo), selector de
+herramienta (Muro/Puerta/Ventana/Borrar), superficie derivada mostrada
+en vivo, controles de columnas/filas/tamaño de celda/orientación de la
+fachada frontal + edificio enfrente por cada una de las 4 fachadas.
+Guarda solo si `validarPlano()` da un plano estructuralmente válido — un
+intento inválido nunca sobreescribe el último guardado bueno (verificado
+explícitamente: borrar la única ventana de un plano de prueba y guardar
+deja el plano guardado intacto, con su `orientacionCasa` y número de
+segmentos originales). `parametros.js` pierde por completo los campos de
+`anchoHabitacion`/`superficie`/`ventanas` (ya no tenían ningún efecto
+real desde que el resto de la app lee del plano) y enlaza al editor
+nuevo; `validacion.js` pierde la validación correspondiente a esos
+campos y gana rangos nuevos para los del plano
+(`planoCols`/`planoFilas`/`tamanoCelda`/`orientacionCasa`, reutilizando
+`alturaEdificioEnfrente`/`distanciaEdificioEnfrente` tal cual para las 4
+fachadas). `src/persistencia/piso.js` NO se tocó en esta fase a
+propósito — seguía siendo el valor por defecto que consumía
+`geometria.js` (con el esquema antiguo) hasta que la Fase 3 la
+reescribiera; tocar el esquema de `piso.js` antes de eso habría roto
+`test/escena3d-geometria.test.js` sin necesidad.
+
+**Fase 3 — Extrusión 3D (`src/escena3d/geometria.js`, reescrito por
+completo).** `calcularGeometria(plano, alturaTecho)` (antes recibía todo
+`parametrosPiso`) convierte los tramos fusionados de `plano.js` a
+paredes 3D reales — cualquier número, con o sin ventana, en cualquier
+disposición. Cada tramo aporta `{centro, normal, ancho, alto, cristal,
+anchoVentana?}`, la misma forma exacta que ya consumía
+`construirPared`/`construirParedOpaca`/`construirParedConVentana`
+(`escena.js`) sin ningún cambio — confirmado por la exploración previa
+que esas funciones ya eran genéricas por-pared, nunca leían `pared.id`.
+Una ventana ya es, por construcción, un tramo PROPIO (`fusionarEnTramos`
+corta la línea en cuanto cambia la clase), así que `anchoVentana` es
+siempre el ancho entero de su tramo — las "franjas de pared opaca a los
+lados" de la Fase 6 ya no hacen falta calcularlas aparte, son
+simplemente los tramos 'muro' contiguos, tramos independientes con su
+propia malla.
+
+Suelo y techo pasan de un único cuadrilátero (`geo.esquinasSuelo`, 4
+puntos) a un array de cuadriláteros, uno por celda interior — la huella
+ya no es necesariamente un rectángulo. Las esquinas que usaban
+buzón/farola (`geo.esquinasSuelo[0]`, o la de proyección extrema sobre
+`perp`) pasan a `geo.esquinasCaja` (nuevo campo: las 4 esquinas de la
+caja englobante de la huella completa, no de la huella real) — ninguna
+de las dos funciones decorativas cambia de lógica interna, solo de qué
+array leen. `dentroDeLaHabitacion` (toperas/filamentos) ya usaba
+`geo.anchoLateral`/`geo.profundidad` para un test de "dentro del
+rectángulo proyectado" — con esos dos campos redefinidos como los de la
+caja englobante en vez de los de una única habitación, la función pasa a
+ser una aproximación conservadora automáticamente, sin tocar una sola
+línea de su código. `construirCamara` tampoco se tocó: su azimut base ya
+sale directamente de `plano.orientacionCasa` (vía `geo.ejeProfundidad`),
+nunca de "la primera ventana" — el problema de "qué pared uso de
+referencia" que preocupaba antes de empezar quedó resuelto solo por el
+propio diseño de datos de la Fase 0.
+
+`crearEscena3D` pasa a recibir `(contenedor, plano, alturaTecho, sol,
+clima, luna)` en vez del `piso` completo — cierra el shim temporal de la
+Fase 1 (`escena3dDashboard.js`/`main-escena3d.js` ya no inyectan
+ventanas/superficie/anchoHabitacion sobre un piso falso, cargan el plano
+y le pasan `alturaTecho` suelto, el único dato que sí sigue viviendo en
+`parametrosPiso` porque no es parte de un dibujo 2D).
+
+**Fase 4 — Pulido y rendimiento.** Al analizar cuántas mallas 3D generaba
+un plano realista se encontró un problema ya en producción, no
+hipotético: el plano MIGRADO por defecto del usuario real (resolución
+0.25m/celda, ~475 celdas) construía casi 950 mallas de Three.js solo
+para suelo+techo (una por celda, heredado tal cual de la Fase 3) — más
+mallas que el resto de la escena entera (isla, nubes, lluvia, viento)
+junto. Arreglado fusionando TODAS las celdas de suelo (y, por separado,
+todas las de techo) en una única `BufferGeometry` indexada por
+(`construirQuadsFusionados`, sustituye a `construirQuadPlano`, que se
+eliminó al quedarse sin ningún otro consumidor) — visualmente idéntico
+(mismos triángulos, mismo material), pero 2 mallas en vez de ~950.
+Verificado con captura antes/después a sol rasante (mismo parche de luz
+diagonal en el suelo, sombra del tejado idéntica). Las paredes NO se
+fusionaron: un piso realista de 3 habitaciones + 2 baños + salón +
+cocina (~76m² reales, cuadrícula de 1m/celda) da del orden de 20 tramos
+de pared — órdenes de magnitud menos que el problema real de
+suelo/techo, sin motivo para la complejidad añadida de fusionar cajas
+con distinta posición/rotación cada una.
+
+Encuadre de cámara en formas irregulares: verificado a propósito con una
+casa en forma de U (dos alas + un cuerpo central, patio interior vacío
+en medio) en dos configuraciones — patio abierto hacia la cámara (se ve
+razonablemente bien, ambas alas y el fondo del patio visibles) y patio
+abierto hacia un lado (el ala delantera oculta buena parte del patio y
+la pared de la otra ala) — confirma el límite conocido ya anotado como
+decisión de diseño: la cámara fija no persigue el mejor ángulo para
+cualquier silueta, aceptado para v1.
+
+**Verificación de conjunto:** `npm test` en verde tras cada una de las 4
+fases (46 casos nuevos: `paredes.test.js`, `plano.test.js`,
+`persistencia-plano.test.js`, `escena3d-geometria.test.js` reescrito por
+completo — 0 cambios en ningún test de `model.test.js`/`recomendacion`/
+`termico`, confirmando que el motor físico nunca se tocó). `npm run
+build` sin errores tras cada fase con UI/3D. Visual con Playwright en
+cada fase: editor dibujando/guardando/recargando; migración desde
+localStorage con el esquema anterior sin pedir nada al usuario; una casa
+en L de 2 habitaciones con puerta interior y ventanas en 4 fachadas
+distintas, con su forma real (no un rectángulo) tanto en landscape como
+en retrato; el piso migrado por defecto viéndose igual que antes de
+empezar (mismo parche de sol, misma sombra) antes y después de la
+fusión de mallas del suelo/techo. Sin errores de consola en ningún caso.
