@@ -438,6 +438,96 @@ button.boton-borrar:hover {
   border-color: var(--error);
 }
 
+/* Pronóstico extendido, "estilo Google Weather" (pedido explícito del
+   usuario, docs/estado.md): horas cada 3h a 21h vista + 7 días, dos filas
+   horizontales que caben en el ancho de pantalla sin scroll (7 puntos
+   justos, no una tira deslizable con muchos más) — encima de .fila-clima,
+   que sigue mostrando el instante presente. */
+.pronostico-extendido {
+  border: 1px solid var(--borde);
+  border-radius: 0.2rem;
+  background: var(--papel);
+  padding: 0.6rem 0.6rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pronostico-extendido.pron-cargando,
+.pronostico-extendido.pron-error {
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  padding: 0.7rem 0.9rem;
+}
+
+.pron-horas {
+  position: relative;
+  padding-top: 1.5rem;
+}
+
+.pron-grafico {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 1.5rem;
+  overflow: visible;
+}
+
+.pron-grafico path {
+  fill: none;
+  stroke: var(--acento);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.55;
+}
+
+.pron-fila {
+  display: flex;
+  justify-content: space-evenly;
+}
+
+.pron-fila-dias {
+  border-top: 1px solid var(--borde);
+  padding-top: 0.5rem;
+}
+
+.pron-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.pron-valor {
+  font-size: 0.72rem;
+  color: var(--texto-suave);
+}
+
+.pron-icono svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  color: var(--acento-oscuro);
+}
+
+.pron-etiqueta {
+  font-size: 0.68rem;
+  color: var(--texto-suave);
+}
+
+.pron-dia-temps {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.pron-dia-temps strong {
+  color: var(--texto);
+  font-weight: 600;
+}
+
 .fila-clima {
   display: flex;
   flex-wrap: wrap;

@@ -1,4 +1,5 @@
-// Pestaña "Casa" (rediseño móvil, ver docs/estado.md): la escena 3D
+// Pestaña "Tiempo" en la nav (antes "Casa" — id/href/archivo sin cambiar,
+// solo el texto/icono visibles, ver navInferior.js). La escena 3D
 // (Fase 6) pasa a tener su propia página a pantalla completa, en vez de
 // vivir como un hero de 55vh dentro de Inicio — Inicio necesitaba ese
 // espacio para caber sin scroll (pedido explícito del usuario), y la

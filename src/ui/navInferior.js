@@ -14,11 +14,17 @@
 
 import { iconoInicio, iconoCasa3D, iconoHistorico, iconoParametros } from './iconos.js';
 
+// 'casa' (id/href sin cambiar, sigue siendo la escena 3D en casa.html) se
+// muestra como "Tiempo" con el icono de sol que antes usaba Parámetros —
+// pedido explícito del usuario: la escena 3D ya refleja el clima real
+// (sol/nubes/lluvia/nieve/noche, Fase 6), así que "Tiempo" describe mejor
+// lo que se ve ahí que "Casa". Parámetros se queda con el icono de casa
+// que dejó libre — mismo swap, en el sentido contrario.
 const PESTANAS = [
   { id: 'inicio', href: 'index.html', texto: 'Inicio', icono: iconoInicio },
-  { id: 'casa', href: 'casa.html', texto: 'Casa', icono: iconoCasa3D },
+  { id: 'casa', href: 'casa.html', texto: 'Tiempo', icono: iconoParametros },
   { id: 'historico', href: 'historico.html', texto: 'Histórico', icono: iconoHistorico },
-  { id: 'parametros', href: 'parametros.html', texto: 'Parámetros', icono: iconoParametros },
+  { id: 'parametros', href: 'parametros.html', texto: 'Parámetros', icono: iconoCasa3D },
 ];
 
 export function insertarNavInferior(activa) {

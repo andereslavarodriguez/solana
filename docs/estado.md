@@ -1,10 +1,10 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (la casa dibujada mantiene siempre la
-misma superficie visual sea cual sea la superficie/proporciones reales
-del piso, y las ventanas ya se dibujan a su ancho real en vez de ocupar
-siempre la pared entera — ver "Tamaño visual fijo de la casa y ventanas a
-su ancho real" al final del documento)
+Última actualización: 2026-08-18 (pronóstico extendido estilo Google
+Weather en Inicio — horas cada 3h + 7 días, con línea de temperatura — y
+la pestaña "Casa" pasa a llamarse "Tiempo" con icono de sol; ver
+"Pronóstico extendido (horas + 7 días) y pestaña Tiempo" al final del
+documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4026,3 +4026,136 @@ importar el ancho real editado en Parámetros.
    (frente a los 2.0m/1.8m reales por defecto) muestra huecos de cristal
    claramente estrechos con pared opaca visible a los lados, en vez de
    cristal de pared a pared — sin errores de consola en ningún caso.
+
+### Pronóstico extendido (horas + 7 días) y pestaña Tiempo (2026-08-18)
+
+Pedido explícito del usuario: un rectángulo en la parte de arriba del
+apartado de clima de Inicio, estilo el buscador de tiempo de Google en
+móvil — dos filas horizontales (horas cada 3h a 21h vista, y los 7 días
+siguientes con icono + máx/mín), con la línea que traza la temperatura
+igual que la de Google. De paso, cambiar el nombre de la pestaña "Casa" a
+"Tiempo" con icono de sol (reutilizando el que tenía Parámetros) y dar a
+Parámetros el icono de casa que quedaba libre.
+
+1. **Datos: llamada nueva y aparte a Open-Meteo
+   (`obtenerPronosticoExtendido`, `src/data/openMeteo.js`), no una
+   ampliación de la que ya usa el modelo.** `obtenerClimaMinutely15`
+   (Fase 2) sigue intacta — el pronóstico extendido es puramente
+   informativo (no alimenta `termico.js`/`recomendacion.js`, que siguen
+   con su horizonte real de 6-8h), así que mezclar ambas llamadas habría
+   acoplado sin necesidad una petición del modelo con datos que solo
+   consume la UI. Un único fetch con `hourly=temperature_2m,weather_code
+   &forecast_hours=24` + `daily=weather_code,temperature_2m_max,
+   temperature_2m_min&forecast_days=7` (confirmado con curl real que
+   Open-Meteo sirve ambos bloques en la misma petición, con
+   `timezone=auto` igual que el resto del proyecto).
+
+2. **`categoriaTiempo(codigoTiempo)` vive en `src/data/openMeteo.js`,
+   junto a `esTormenta()` — mismo criterio ya establecido en la Fase 6
+   checkpoint 6 ("es interpretación del dato de la API, no algo
+   específico de la escena/UI que la consume").** Mapea el código WMO
+   real a 6 categorías (`despejado`, `parcial`, `nublado`, `lluvia`,
+   `nieve`, `tormenta`) — niebla (45/48) se pliega dentro de `nublado` en
+   vez de tener icono propio, mismo criterio de "menos iconos, más calma"
+   que ya pedía CLAUDE.md para el resto de la interfaz. `esTormenta()` no
+   se tocó (`categoriaTiempo` coincide con ella en los 3 códigos de
+   tormenta, verificado en `test/openMeteo.test.js`).
+
+3. **Iconos nuevos en `src/ui/iconos.js`: sol, nube+sol, nube, nieve,
+   tormenta — y, tras verlo en una captura real, también luna y
+   nube+luna.** El primer resultado (sin variante de noche) mostraba un
+   sol brillante a las 2 de la madrugada para cualquier hora "despejada"
+   — confirmado en captura de móvil, un bug real de credibilidad, no solo
+   estético, para una app que ya calcula posición solar real en todos
+   lados. `seleccionarHoras()` (`src/ui/pronosticoExtendido.js`) ahora
+   recibe `lat`/`lon` y calcula `nocturno` con `posicionSolar()`
+   (`src/data/sol.js`, mismo cálculo que ya usa el resto de la app) para
+   cada uno de los 7 puntos; `iconoCategoria()` sustituye sol→luna y
+   nube+sol→nube+luna cuando `nocturno` es cierto. Solo esas dos
+   categorías tienen variante de noche — nublado/lluvia/nieve/tormenta se
+   leen igual de bien a cualquier hora, un icono de noche propio para
+   cada una habría sido más densidad visual sin más claridad real.
+   Verificado con datos reales (Pamplona, agosto): 23:00/02:00/05:00
+   muestran luna, 20:00/08:00/11:00/14:00 muestran sol — y con
+   `posicionSolar()` real (no aproximado) se confirmó además el caso
+   límite de la puesta de sol (21:00 con elevación +0.4°, todavía día por
+   muy poco), documentado en el test en vez de dejarlo como una
+   coincidencia sin explicar.
+
+4. **Sin scroll horizontal ni tira deslizable — exactamente 7 puntos por
+   fila que caben en el ancho de un móvil, a diferencia de la tira de
+   muchas horas que tiene Google.** El usuario pidió horas cada 3h con
+   horizonte de 21h, que da exactamente 7 puntos — con `justify-content:
+   space-evenly` y texto pequeño (0.68-0.72rem), caben en una sola fila
+   sin deslizar ni envolver, tanto para las horas como para los 7 días.
+   Evita la complejidad de una tira `overflow-x` con scroll-snap para un
+   caso que no la necesita.
+
+5. **Línea de temperatura: SVG con viewBox de ancho 100 (para que la
+   coordenada X sea directamente un porcentaje), función pura
+   `trazadoTemperatura()` separada de la generación de HTML — testeable
+   sin DOM, mismo criterio que el resto del proyecto para su lógica no
+   trivial.** Bug real encontrado por el primer test: con temperaturas
+   constantes, la fórmula de normalización `(t-min)/(max-min)` con
+   `max-min` sustituido por 1 solo para evitar la división por cero
+   dibujaba la línea pegada abajo del todo (trataba el caso "sin
+   variación" como si fuera "el valor más frío"), no a media altura como
+   sería lo esperable para un pronóstico estable — corregido con un caso
+   `constante` explícito que usa 0.5 de normalizado en vez de reutilizar
+   un rango falso de 1.
+
+6. **La línea NO alimenta ningún dato al motor de recomendación ni al
+   histórico — es puramente decorativa, sobre el ancho completo de la
+   fila de horas, sin intentar alinear cada punto exactamente con el
+   centro de su tarjeta (`justify-content: space-evenly` no garantiza
+   centros en `(i+0.5)/n`, solo una aproximación razonable).** Aceptado a
+   propósito: es un adorno tipo "curva a mano" como la de Google, no un
+   gráfico de precisión — el histórico (Fase 7, `historico.js`, Chart.js)
+   sigue siendo el único gráfico "serio" de la app.
+
+7. **Fallo de red independiente entre clima (modelo) y pronóstico
+   extendido — `Promise.allSettled`, no una sola llamada con try/catch
+   compartido.** Si `obtenerPronosticoExtendido` falla (o Open-Meteo
+   tarda) no debe tumbar las recomendaciones de ventana/persiana, que
+   solo dependen de `obtenerDatosReales` — y viceversa, un fallo del
+   modelo no debería ocultar el widget si esa llamada sí funcionó.
+   `estadoPronExt`/`datosPronExt` son estado independiente de
+   `estadoClima`/`datosClima` en `dashboard.js`, con su propio mensaje de
+   error discreto (`.pron-error`) que no compite visualmente con el de
+   `.fila-clima-error`.
+
+8. **Inicio ya NO cabe sin deslizar con este widget añadido (817px de
+   contenido en un viewport de 664px, iPhone 13) — aceptado, no
+   corregido a la fuerza.** El rediseño móvil (checkpoint anterior) ya
+   había dejado anotado que "no deslizar" es el objetivo para el caso
+   normal, no una prohibición dura — un widget de este tamaño (dos filas
+   + línea + máx/mín) no cabía en el presupuesto de altura que dejaba esa
+   pantalla sin sacrificar legibilidad (texto/iconos ya están cerca del
+   mínimo razonable). Ningún `overflow:hidden` se ha añadido para
+   forzarlo — el contenido hace scroll vertical con normalidad, como ya
+   preveía esa decisión.
+
+9. **Pestaña "Casa" → "Tiempo": solo texto/icono, sin tocar `id`/`href`
+   ni renombrar `casa.html`.** El usuario pidió "cambiar el nombre... y
+   el icono", no la ruta — `insertarNavInferior('casa')` en
+   `main-casa.js` no cambió, evitando tocar `vite.config.js` y todas las
+   referencias a `casa.html`/`#escena3d` por un cambio que es solo de
+   etiqueta visible. `<title>` de `casa.html` sí se actualizó a "Solana —
+   Tiempo" (visible en la pestaña del navegador, coherente con el nuevo
+   nombre). El icono de sol reutilizado es literalmente
+   `iconoParametros()` (círculo+rayos) — su nombre de función no se tocó
+   para no forzar un rename sin necesidad funcional; el comentario de
+   `iconoInicio()` que explicaba "no es una casa para no confundir con la
+   pestaña Casa" se actualizó para reflejar que ahora es Parámetros quien
+   tiene el icono de casa.
+
+10. **Verificación:** 14 casos de prueba nuevos (`test/openMeteo.test.js`,
+    `test/pronosticoExtendido.test.js`), 160 en total en `npm test`, sin
+    romper ninguno de los 146 ya existentes. `npm run build` sin errores.
+    Visual con Playwright (dispositivo `iPhone 13` emulado, datos reales
+    de Pamplona vía `vite preview`): widget con horas/días reales y
+    coherentes (icono de tormenta en el día con más lluvia, lunas en las
+    horas de madrugada), pestaña "Tiempo" con icono de sol y pestaña
+    "Parámetros" con icono de casa, sin errores de consola en ningún
+    caso. Script ad-hoc, no committeado (mismo criterio que otras
+    verificaciones puntuales del proyecto).

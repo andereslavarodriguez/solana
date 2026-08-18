@@ -9,6 +9,8 @@
 // a `[data-cargado="true"]` en vez de un timeout fijo o `networkidle`.
 
 import { obtenerDatosReales } from '../data/adaptador.js';
+import { obtenerPronosticoExtendido } from '../data/openMeteo.js';
+import { seleccionarHoras, seleccionarDias, pronosticoExtendidoHtml } from './pronosticoExtendido.js';
 import { cargarParametrosPiso, guardarParametrosPiso } from '../persistencia/piso.js';
 import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { cargarEstadoVentanas, guardarEstadoVentanas } from '../persistencia/estadoVentanas.js';
@@ -47,6 +49,12 @@ export function montarDashboard(root, storage) {
 
   let estadoClima = 'cargando'; // 'cargando' | 'ok' | 'error'
   let datosClima = null;
+  // Pronóstico extendido (horas cada 3h + 7 días, "widget estilo Google
+  // Weather") — estado independiente de estadoClima/datosClima: es
+  // puramente informativo, así que un fallo aquí no debe tumbar las
+  // recomendaciones de ventana/persiana, que solo dependen de datosClima.
+  let estadoPronExt = 'cargando'; // 'cargando' | 'ok' | 'error'
+  let datosPronExt = null;
   // Formulario de anotación colapsado por defecto: pedido explícito de una
   // pantalla compacta que quepa sin deslizar — el número de un vistazo ya
   // está en la fila de "Interior", el formulario completo solo hace falta
@@ -106,18 +114,40 @@ export function montarDashboard(root, storage) {
 
   async function actualizarClima() {
     estadoClima = 'cargando';
+    estadoPronExt = 'cargando';
     render();
-    try {
-      datosClima = await obtenerDatosReales(ubicacion.lat, ubicacion.lon);
+
+    // En paralelo (mismo host, dos peticiones independientes): un fallo en
+    // una no debe esperar ni tumbar a la otra.
+    const [rClima, rPronExt] = await Promise.allSettled([
+      obtenerDatosReales(ubicacion.lat, ubicacion.lon),
+      obtenerPronosticoExtendido(ubicacion.lat, ubicacion.lon),
+    ]);
+
+    if (rClima.status === 'fulfilled') {
+      datosClima = rClima.value;
       estadoClima = 'ok';
       if (gemelo) {
         gemelo = pasoGemelo(gemelo, new Date(), datosClima.actual, estadoVentanas, piso);
         guardarGemelo(storage, gemelo);
       }
-    } catch (error) {
+    } else {
       estadoClima = 'error';
-      console.error(error);
+      console.error(rClima.reason);
     }
+
+    if (rPronExt.status === 'fulfilled') {
+      const ahora = new Date();
+      datosPronExt = {
+        horas: seleccionarHoras(rPronExt.value.hourly, ahora, ubicacion.lat, ubicacion.lon),
+        dias: seleccionarDias(rPronExt.value.daily),
+      };
+      estadoPronExt = 'ok';
+    } else {
+      estadoPronExt = 'error';
+      console.error(rPronExt.reason);
+    }
+
     render();
   }
 
@@ -127,12 +157,14 @@ export function montarDashboard(root, storage) {
       estadoVentanas,
       estadoClima,
       datosClima,
+      estadoPronExt,
+      datosPronExt,
       ultimaAnotacion: anotacionMasReciente(),
       recomendacionInfo: calcularRecomendaciones(),
       mostrarFormAnotacion,
     });
     conectarEventos();
-    root.dataset.cargado = estadoClima === 'cargando' ? 'false' : 'true';
+    root.dataset.cargado = estadoClima === 'cargando' || estadoPronExt === 'cargando' ? 'false' : 'true';
   }
 
   function conectarEventos() {
@@ -227,6 +259,8 @@ function plantilla({
   estadoVentanas,
   estadoClima,
   datosClima,
+  estadoPronExt,
+  datosPronExt,
   ultimaAnotacion,
   recomendacionInfo,
   mostrarFormAnotacion,
@@ -239,6 +273,7 @@ function plantilla({
       </button>
     </header>
 
+    ${pronosticoExtendidoHtml(estadoPronExt, datosPronExt)}
     ${filaClima(estadoClima, datosClima)}
     ${filaInterior(ultimaAnotacion, mostrarFormAnotacion)}
 

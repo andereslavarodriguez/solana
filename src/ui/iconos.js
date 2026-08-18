@@ -13,7 +13,8 @@ const base = (contenido, extra = '') =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ${extra}>${contenido}</svg>`;
 
 // Pestaña "Inicio" (panel de control) — deliberadamente NO una casa, para
-// no confundirse con la pestaña "Casa" (escena 3D).
+// no confundirse con el icono de casa de la pestaña "Parámetros" (desde el
+// swap "Casa"→"Tiempo" con icono de sol, ver navInferior.js).
 export function iconoInicio() {
   return base(`
     <line x1="4" y1="7" x2="20" y2="7"/>
@@ -138,5 +139,69 @@ export function iconoLluvia() {
     <line x1="8" y1="18" x2="8" y2="20"/>
     <line x1="12" y1="18" x2="12" y2="20"/>
     <line x1="16" y1="18" x2="16" y2="20"/>
+  `);
+}
+
+// Iconos de tiempo para el pronóstico extendido (docs/estado.md, "widget
+// estilo Google Weather") — una categoría por icono (categoriaTiempo(),
+// src/data/openMeteo.js), sin más variantes de intensidad para no sumar
+// densidad visual que CLAUDE.md pide evitar.
+
+export function iconoSol() {
+  return base(`
+    <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/>
+    <path d="M12 2.5v2.4M12 19.1v2.4M21.5 12h-2.4M4.9 12H2.5M18.6 5.4l-1.7 1.7M7.1 16.9l-1.7 1.7M18.6 18.6l-1.7-1.7M7.1 7.1 5.4 5.4"/>
+  `);
+}
+
+// Sol asomando por detrás de la nube — mismo trazo de nube que iconoLluvia/
+// iconoNube, con un sol pequeño en la esquina libre superior-izquierda (el
+// hueco que deja esa forma de nube antes de que empiece su arco).
+export function iconoNubeSol() {
+  return base(`
+    <circle cx="5.2" cy="6" r="2.1" fill="currentColor" stroke="none"/>
+    <path d="M5.2 2.3v1.1M1.7 6h1.1M2.9 3l.9.9M2.9 9l.9-.9" stroke-width="1.4"/>
+    <path d="M7 13a4 4 0 0 1 .9-7.9A5.5 5.5 0 0 1 18.5 8.5 3.5 3.5 0 0 1 18 15H7Z"/>
+  `);
+}
+
+export function iconoNube() {
+  return base(`<path d="M7 13a4 4 0 0 1 .9-7.9A5.5 5.5 0 0 1 18.5 8.5 3.5 3.5 0 0 1 18 15H7Z"/>`);
+}
+
+export function iconoNieve() {
+  return base(`
+    <line x1="12" y1="3" x2="12" y2="21"/>
+    <line x1="4.5" y1="7.5" x2="19.5" y2="16.5"/>
+    <line x1="19.5" y1="7.5" x2="4.5" y2="16.5"/>
+    <line x1="9" y1="5" x2="7" y2="3.5"/>
+    <line x1="15" y1="5" x2="17" y2="3.5"/>
+    <line x1="9" y1="19" x2="7" y2="20.5"/>
+    <line x1="15" y1="19" x2="17" y2="20.5"/>
+  `);
+}
+
+// Luna creciente (círculo grande menos círculo desplazado) — variante de
+// noche de iconoSol/iconoNubeSol: sin esto, "despejado"/"parcial" de
+// madrugada mostraban un sol brillante a las 3 de la mañana.
+export function iconoLuna() {
+  return base(`<path d="M20.5 13.4A8.5 8.5 0 1 1 10.7 3.6a7 7 0 0 0 9.8 9.8Z" fill="currentColor" stroke="none"/>`);
+}
+
+// Mismo hueco superior-izquierdo que iconoNubeSol, con una luna en vez de
+// un sol con rayos.
+export function iconoNubeLuna() {
+  return base(`
+    <path d="M6.9 3.2a3 3 0 1 1-3.6 5.1 2.4 2.4 0 0 0 3.6-5.1Z" fill="currentColor" stroke="none"/>
+    <path d="M7 13a4 4 0 0 1 .9-7.9A5.5 5.5 0 0 1 18.5 8.5 3.5 3.5 0 0 1 18 15H7Z"/>
+  `);
+}
+
+// Nube desplazada hacia arriba respecto a iconoLluvia/iconoNube, para dejar
+// hueco al rayo debajo.
+export function iconoTormenta() {
+  return base(`
+    <path d="M7 11a4 4 0 0 1 .9-7.4A5.5 5.5 0 0 1 18.5 6.5 3.5 3.5 0 0 1 18 13H7Z"/>
+    <path d="M13 13l-3 5h3l-2 4"/>
   `);
 }
