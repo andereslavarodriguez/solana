@@ -1,10 +1,9 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (pronóstico extendido estilo Google
-Weather en Inicio — horas cada 3h + 7 días, con línea de temperatura — y
-la pestaña "Casa" pasa a llamarse "Tiempo" con icono de sol; ver
-"Pronóstico extendido (horas + 7 días) y pestaña Tiempo" al final del
-documento)
+Última actualización: 2026-08-18 (el pronóstico extendido se muda de
+Inicio a la pestaña "Tiempo" — flota traslúcido sobre el cielo de la
+escena 3D, encima de la casa — ver "El pronóstico extendido se muda al
+cielo de Tiempo" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4159,3 +4158,87 @@ Parámetros el icono de casa que quedaba libre.
     "Parámetros" con icono de casa, sin errores de consola en ningún
     caso. Script ad-hoc, no committeado (mismo criterio que otras
     verificaciones puntuales del proyecto).
+
+### El pronóstico extendido se muda al cielo de "Tiempo" (2026-08-18, misma tarde)
+
+Al ver el widget desplegado en Inicio, pedido explícito del usuario:
+"lo quería poner en Tiempo, encima de donde está la casa, en el cielo,
+eso quedaba vacío" — más "dale un poco de transparencia y redondea las
+esquinas del recuadro". No un añadido nuevo: se mueve por completo desde
+Inicio (`dashboard.js`) a la pestaña "Tiempo" (`casa.html`), flotando
+sobre la escena 3D en vez de vivir como una tarjeta más en la lista de
+Inicio.
+
+1. **`escena3dDashboard.js` gana un segundo contenedor
+   (`montarEscena3D(contenedorEscena, contenedorPronostico, storage)`) y
+   un segundo fetch, independiente del que ya alimenta la escena — un
+   fallo o una tardanza del pronóstico extendido no debe retrasar ni
+   tumbar la construcción de la escena 3D, que sigue siendo el elemento
+   central de esta pantalla (spec.md §6.1).** `montarPronosticoOverlay()`,
+   función nueva y separada de la lógica de la escena, hace su propio
+   `try/catch` y su propio `contenedor.dataset.cargado`, mismo patrón que
+   ya usa `contenedorEscena` para que un script de verificación tenga una
+   señal fiable de cuándo cada pieza terminó.
+
+2. **`dashboard.js` vuelve exactamente a como estaba antes de esta
+   sesión — sin `estadoPronExt`/`datosPronExt`, sin el fetch de
+   `obtenerPronosticoExtendido`, sin la llamada a
+   `pronosticoExtendidoHtml()`.** No quedó ningún resto: el widget vivía
+   ahí por una decisión de la sesión anterior que el propio usuario
+   revirtió al verlo en contexto real, así que revertir del todo (no
+   dejar la lógica "por si acaso") es lo correcto — `src/ui/
+   pronosticoExtendido.js`, sus iconos y sus tests no se tocaron, solo
+   cambió QUIÉN los llama. Efecto colateral bienvenido, no buscado: sin
+   el widget, Inicio vuelve a caber sin deslizar en el viewport de
+   referencia (664px de contenido en 664px visibles) — la sesión anterior
+   ya había aceptado explícitamente el scroll como su coste, así que
+   desaparece solo, no hizo falta ningún ajuste de layout para lograrlo.
+
+3. **Overlay con `position:fixed`, mismo patrón que `.nav-inferior` en el
+   extremo opuesto de la pantalla (`env(safe-area-inset-top)`, mismo
+   `z-index` por debajo del de la nav).** `#pron-overlay` (el
+   envoltorio posicionado) y `.pronostico-extendido` (la tarjeta en sí,
+   con su fondo/borde/radio) son elementos distintos a propósito: el
+   envoltorio lleva `pointer-events:none` y solo la tarjeta
+   `pointer-events:auto` — así el hueco que deja el `left/right:
+   0.9rem` del envoltorio (fuera de la tarjeta) no bloquea el
+   arrastre/pellizco de la escena de fondo, verificado con un gesto real
+   (CDP `Input.dispatchTouchEvent`) que sí desplazaba la vista con el
+   overlay presente en pantalla.
+
+4. **Transparencia con `rgba()` fijo, no `color-mix()` con `--papel`.**
+   Pedido explícito de "un poco de transparencia" — se usó
+   `rgba(255, 255, 254, 0.82)` (el mismo blanco cálido de `--papel`, con
+   alpha) en vez de `color-mix(in srgb, var(--papel) 82%, transparent)`
+   (más "correcto" en el sentido de no duplicar el valor del color) para
+   que un navegador sin soporte de `color-mix()` no se quede sin ningún
+   fondo declarado — un valor fijo siempre se aplica. Con
+   `backdrop-filter: blur(7px)` (más `-webkit-` para Safari/iOS) y una
+   sombra suave (`box-shadow`) para que se lea como una tarjeta
+   "flotando" de verdad sobre la escena, no como un rectángulo plano
+   pegado encima.
+
+5. **Esquinas mucho más redondeadas que el resto de la interfaz (1rem
+   vs. 0.2rem en el resto) — inconsistencia deliberada, no un
+   descuido.** El resto de la app usa esquinas casi rectas a propósito
+   (Fase 8, decisión 12: "minimalista", esquinas de 0.15-0.2rem en toda
+   la interfaz, para no parecer una plantilla genérica). Aquí se rompe
+   esa convención porque el contexto es distinto: una tarjeta flotando
+   sobre un cielo ilustrado pide un aire de "recorte suave", no el
+   mismo lenguaje de tarjetas ancladas al fondo plano de página —
+   pedido explícito del usuario, no una decisión unilateral de apartarse
+   del estilo ya establecido.
+
+6. **Verificación:** `npm test` (160 casos, sin cambios — el trabajo de
+   esta sesión es reorganizar DOM/CSS/orquestación, no lógica pura nueva)
+   y `npm run build` sin errores. Visual con Playwright (dispositivo
+   `iPhone 13` emulado y desktop 1280×800, datos reales): tarjeta
+   traslúcida con esquinas redondeadas flotando sobre el cielo azul de
+   "Tiempo", por encima de la casa; confirmado con
+   `getBoundingClientRect()`/`getComputedStyle()` que la posición y el
+   `border-radius`/`background` calculados coinciden con lo pedido;
+   Inicio confirmado sin `.pronostico-extendido` y cabiendo sin deslizar;
+   gesto de arrastre real sobre la escena con el overlay visible
+   confirmando que el paneo/zoom de la escena (checkpoints anteriores)
+   sigue intacto. Sin errores de consola en ningún caso. Script ad-hoc,
+   no committeado.

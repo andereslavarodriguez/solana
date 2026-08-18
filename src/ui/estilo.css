@@ -79,6 +79,26 @@ body:has(#escena3d) {
   height: 100dvh;
 }
 
+/* Envuelve el pronóstico extendido sobre la escena 3D de "Tiempo"
+   (casa.html) — mismo patrón `position:fixed` + `env(safe-area-inset)`
+   que ya usa .nav-inferior, en el extremo opuesto de la pantalla.
+   `pointer-events:none` en el envoltorio y `auto` solo en la tarjeta:
+   dos manos, no una — el hueco a los lados (`left/right: 0.9rem`) sigue
+   pudiendo recibir el arrastre/pellizco de la escena de fondo, la
+   tarjeta en sí no dejaría pasar el gesto de todas formas. */
+#pron-overlay {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 0.9rem);
+  left: 0.9rem;
+  right: 0.9rem;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#pron-overlay .pronostico-extendido {
+  pointer-events: auto;
+}
+
 /* Escena 3D integrada en el dashboard (Fase 6, checkpoint 24): banner
    superior a ancho completo, NO a pantalla completa como en escena3d.html
    (id distinto a propósito — misma hoja de estilos, pero un contenedor
@@ -441,12 +461,25 @@ button.boton-borrar:hover {
 /* Pronóstico extendido, "estilo Google Weather" (pedido explícito del
    usuario, docs/estado.md): horas cada 3h a 21h vista + 7 días, dos filas
    horizontales que caben en el ancho de pantalla sin scroll (7 puntos
-   justos, no una tira deslizable con muchos más) — encima de .fila-clima,
-   que sigue mostrando el instante presente. */
+   justos, no una tira deslizable con muchos más). Vive flotando sobre el
+   cielo de la pestaña "Tiempo" (#pron-overlay, más abajo) — pedido
+   explícito de moverlo ahí desde Inicio, "encima de donde está la casa,
+   en el cielo, eso quedaba vacío". Traslúcida (no opaca como el resto de
+   tarjetas de la app) porque el fondo real es la escena 3D, no
+   `--fondo` — un rgba fijo, no `color-mix()` con `--papel`, para que
+   navegadores sin soporte de esa función no se queden sin fondo alguno.
+   Esquinas bastante más redondeadas que el resto de la interfaz
+   (0.2rem en el resto, minimalista a propósito) — pedido explícito, y
+   aquí encaja: una tarjeta flotando sobre un cielo pide más un aire de
+   "recorte con esquinas suaves" que el resto de tarjetas ancladas al
+   fondo plano de página. */
 .pronostico-extendido {
-  border: 1px solid var(--borde);
-  border-radius: 0.2rem;
-  background: var(--papel);
+  border: 1px solid rgba(221, 217, 204, 0.55);
+  border-radius: 1rem;
+  background: rgba(255, 255, 254, 0.82);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  box-shadow: 0 6px 20px rgba(38, 36, 32, 0.16);
   padding: 0.6rem 0.6rem 0.5rem;
   display: flex;
   flex-direction: column;

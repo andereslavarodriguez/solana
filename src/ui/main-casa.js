@@ -13,5 +13,5 @@ import './registrarServiceWorker.js';
 import { montarEscena3D } from './escena3dDashboard.js';
 import { insertarNavInferior } from './navInferior.js';
 
-montarEscena3D(document.getElementById('escena3d'), window.localStorage);
+montarEscena3D(document.getElementById('escena3d'), document.getElementById('pron-overlay'), window.localStorage);
 insertarNavInferior('casa');

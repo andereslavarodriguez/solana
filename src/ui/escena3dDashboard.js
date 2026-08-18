@@ -11,15 +11,25 @@
 // (`actual.sol` ya trae {elevacion, azimut, nubesPct}) sirve tal cual como
 // `sol` de `crearEscena3D`, sin repetir el cálculo con `posicionSolar` por
 // separado salvo en el fallback de error.
+//
+// También monta el pronóstico extendido (docs/estado.md, "widget estilo
+// Google Weather") flotando sobre el cielo de la escena — pedido explícito
+// de moverlo aquí desde Inicio, donde quedaba abajo del todo; "en el
+// cielo, encima de la casa" es justo el hueco vacío que deja esta escena.
+// Fetch propio e independiente del de la escena (`montarPronosticoOverlay`,
+// más abajo): un fallo o una tardanza ahí no debe retrasar ni tumbar la
+// construcción de la escena 3D, que es el elemento central de la pantalla.
 
 import { crearEscena3D } from '../escena3d/escena.js';
 import { obtenerDatosReales } from '../data/adaptador.js';
+import { obtenerPronosticoExtendido } from '../data/openMeteo.js';
+import { seleccionarHoras, seleccionarDias, pronosticoExtendidoHtml } from './pronosticoExtendido.js';
 import { cargarParametrosPiso } from '../persistencia/piso.js';
 import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { posicionSolar } from '../data/sol.js';
 import { faseLunar } from '../data/luna.js';
 
-export async function montarEscena3D(contenedor, storage) {
+export async function montarEscena3D(contenedorEscena, contenedorPronostico, storage) {
   const piso = cargarParametrosPiso(storage);
   const ubicacion = cargarUbicacion(storage);
   const luna = faseLunar(new Date());
@@ -44,11 +54,32 @@ export async function montarEscena3D(contenedor, storage) {
     clima = { precipitacion: 0, codigoTiempo: null, viento: null };
   }
 
-  crearEscena3D(contenedor, piso, sol, clima, luna);
+  crearEscena3D(contenedorEscena, piso, sol, clima, luna);
   // El fetch de clima es asíncrono, así que el canvas no existe todavía en
   // el primer render de la página — sin esta marca, un script de
   // verificación (o cualquier otro código que espere a que la escena esté
   // lista) no tiene ninguna señal fiable, igual que dashboard.js ya marca
   // `root.dataset.cargado` por el mismo motivo.
+  contenedorEscena.dataset.cargado = 'true';
+
+  if (contenedorPronostico) {
+    montarPronosticoOverlay(contenedorPronostico, ubicacion);
+  }
+}
+
+async function montarPronosticoOverlay(contenedor, ubicacion) {
+  contenedor.innerHTML = pronosticoExtendidoHtml('cargando', null);
+  try {
+    const { hourly, daily } = await obtenerPronosticoExtendido(ubicacion.lat, ubicacion.lon);
+    const ahora = new Date();
+    const datos = {
+      horas: seleccionarHoras(hourly, ahora, ubicacion.lat, ubicacion.lon),
+      dias: seleccionarDias(daily),
+    };
+    contenedor.innerHTML = pronosticoExtendidoHtml('ok', datos);
+  } catch (error) {
+    console.error(error);
+    contenedor.innerHTML = pronosticoExtendidoHtml('error', null);
+  }
   contenedor.dataset.cargado = 'true';
 }
