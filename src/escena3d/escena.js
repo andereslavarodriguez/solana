@@ -30,7 +30,7 @@ import { esTormenta } from '../data/openMeteo.js';
 // todos los tonos subieron de luminosidad, no solo de saturación; el
 // oscurecimiento venía en parte de la luz (ver luzRelleno más abajo), no
 // solo del color base de cada material.
-const COLOR_SUELO = 0xe8c99c; // tono madera cálida, más claro
+const COLOR_SUELO = 0xe3b876; // tono madera cálida, más claro — más saturado (pedido explícito: "colores más vivos, se ve grisáceo")
 const COLOR_PARED = 0xf6e8cc;
 const COLOR_CRISTAL = 0xb8e3e3;
 
@@ -1236,39 +1236,48 @@ function construirCamara(objetivo, radio, azimutBaseDeg, aspecto) {
   const alcanceBase = radio * CAMARA_MARGEN * 0.6;
   const esRetrato = aspecto < 1;
   const alcanceHorizontal = esRetrato ? alcanceBase : alcanceBase * aspecto;
-  // 1.8 arriba / 0.9 abajo (antes 2.2/0.5): la isla quedaba "demasiado
-  // abajo" en móvil (pedido explícito) — más peso relativo hacia `abajo`
-  // sube la isla dentro del encuadre (el punto de mira, más o menos a la
-  // altura de la isla, queda a `abajo/(arriba+abajo)` desde el borde
-  // inferior de la pantalla: antes 0.5/2.7≈18%, ahora 0.9/2.7≈33%), sin
-  // perder la premisa original ("casa abajo, cielo arriba" — sigue habiendo
-  // bastante más cielo que suelo).
-  const FACTOR_ARRIBA_RETRATO = 1.8;
-  const FACTOR_ABAJO_RETRATO = 0.9;
+  // 1.6 arriba / 1.0 abajo (antes 1.8/0.9, y 2.2/0.5 antes de eso): pedido
+  // explícito otra vez ("pon la isla un poco más arriba") — más peso
+  // relativo hacia `abajo` sube la isla dentro del encuadre (el punto de
+  // mira, más o menos a la altura de la isla, queda a
+  // `abajo/(arriba+abajo)` desde el borde inferior de la pantalla: antes
+  // 0.9/2.7≈33%, ahora 1.0/2.6≈38%), sin perder la premisa original ("casa
+  // abajo, cielo arriba" — sigue habiendo más cielo que suelo).
+  const FACTOR_ARRIBA_RETRATO = 1.6;
+  const FACTOR_ABAJO_RETRATO = 1.0;
+  // Landscape usaba arriba=abajo (simétrico) — mismo pedido, mismo efecto:
+  // más peso relativo hacia `abajo` (no hacia `arriba` — bug real de la
+  // primera versión de este cambio, verificado en captura: con
+  // ARRIBA=1.1/ABAJO=0.9 la isla bajaba en vez de subir, exactamente al
+  // revés de lo pedido, porque es la fracción `abajo/(arriba+abajo)` la
+  // que sube el punto de mira desde el borde inferior — mismo criterio ya
+  // documentado para retrato) sube la isla en pantallas anchas
+  // (escritorio, `casa.html` en landscape). Asimetría más discreta que en
+  // retrato porque aquí no había ninguna queja previa sobre "demasiado
+  // abajo", solo el ajuste de hoy.
+  const FACTOR_ARRIBA_LANDSCAPE = 0.9;
+  const FACTOR_ABAJO_LANDSCAPE = 1.1;
+  const FACTOR_ARRIBA = esRetrato ? FACTOR_ARRIBA_RETRATO : FACTOR_ARRIBA_LANDSCAPE;
+  const FACTOR_ABAJO = esRetrato ? FACTOR_ABAJO_RETRATO : FACTOR_ABAJO_LANDSCAPE;
   // Bug real (checkpoint 16, sospecha del usuario confirmada: "cuando se
   // pone en vertical la isla se achata y pierde las proporciones").
   // `alcanceVertical = alcanceBase / aspecto` asumía un frustum SIMÉTRICO
   // (arriba=abajo=alcanceVertical, span total 2×alcanceVertical) para que
   // `alcanceHorizontal/alcanceVertical` coincidiera con `aspecto` — la
-  // proporción real del canvas — y así no deformar nada. Pero en retrato
-  // arriba/abajo NO son iguales (2.2 y 0.5, arriba): el span vertical real
-  // es `(2.2+0.5)×alcanceVertical = 2.7×alcanceVertical`, no
-  // `2×alcanceVertical` como asumía la fórmula — con esa asimetría sin
-  // compensar, la proporción horizontal/vertical del frustum quedaba por
-  // debajo de `aspecto` (2/2.7 ≈ 0.74 veces lo que debería), así que el
-  // mundo se veía más "aplastado" verticalmente de lo que el canvas
-  // realmente permitía: exactamente el achatamiento que describía el
-  // usuario. Corregido escalando `alcanceVertical` por
-  // `2/(FACTOR_ARRIBA_RETRATO+FACTOR_ABAJO_RETRATO)` para que el span
-  // vertical real (arriba+abajo) sí mantenga la proporción con
+  // proporción real del canvas — y así no deformar nada. Con cualquier
+  // asimetría (arriba≠abajo, ahora también en landscape) el span vertical
+  // real es `(FACTOR_ARRIBA+FACTOR_ABAJO)×alcanceVertical`, no
+  // `2×alcanceVertical` — sin compensar, el mundo se ve "aplastado" o
+  // "estirado" verticalmente. Se compensa igual en las dos orientaciones:
+  // escalando `alcanceVertical` por `2/(FACTOR_ARRIBA+FACTOR_ABAJO)` para
+  // que el span vertical real mantenga la proporción con
   // `alcanceHorizontal` que pide `aspecto` — verificado comparando el
-  // mismo objeto redondo (la isla) en landscape y en retrato hasta que
-  // dejó de verse elíptico.
+  // mismo objeto redondo (la isla) hasta que dejó de verse elíptico.
   const alcanceVertical = esRetrato
-    ? (2 * alcanceBase) / ((FACTOR_ARRIBA_RETRATO + FACTOR_ABAJO_RETRATO) * aspecto)
-    : alcanceBase;
-  const arriba = esRetrato ? alcanceVertical * FACTOR_ARRIBA_RETRATO : alcanceVertical;
-  const abajo = esRetrato ? alcanceVertical * FACTOR_ABAJO_RETRATO : alcanceVertical;
+    ? (2 * alcanceBase) / ((FACTOR_ARRIBA + FACTOR_ABAJO) * aspecto)
+    : (2 * alcanceBase) / (FACTOR_ARRIBA + FACTOR_ABAJO);
+  const arriba = alcanceVertical * FACTOR_ARRIBA;
+  const abajo = alcanceVertical * FACTOR_ABAJO;
 
   const camara = new THREE.OrthographicCamera(
     -alcanceHorizontal,
@@ -1351,14 +1360,20 @@ function crearCieloGradiente(elevacion, nocturnidadActual, nubesPct) {
   // Grises con un toque cálido (marrón/ámbar apagado), no azules ni
   // morados — sigue leyéndose como "cielo encapotado" real, no como una
   // mancha de color.
-  const grisHorizonte = new THREE.Color(0xd6cec2).lerp(new THREE.Color(0x352d28), nocturnidadActual);
-  const grisCenit = new THREE.Color(0xb3a99a).lerp(new THREE.Color(0x1c1712), nocturnidadActual);
+  // 0xd6cec2/0xb3a99a (checkpoints 9-21) casi sin saturación — con mucha
+  // nubosidad el cielo entero se leía gris plano, no "encapotado cálido".
+  // Pedido explícito (2026-08-18): "colores más vivos, se ve demasiado
+  // grisáceo" — más saturados (dorado/ámbar apagado en vez de gris puro),
+  // y mezclados con menos fuerza (0.6→0.45, 0.85→0.6) para que el azul
+  // vivo de base siga asomando incluso con mucha nube.
+  const grisHorizonte = new THREE.Color(0xdcc79a).lerp(new THREE.Color(0x352d28), nocturnidadActual);
+  const grisCenit = new THREE.Color(0xac9668).lerp(new THREE.Color(0x1c1712), nocturnidadActual);
 
   const horizonte = horizonteDia.clone().lerp(horizonteNoche, nocturnidadActual);
   const cenit = cenitDia.clone().lerp(cenitNoche, nocturnidadActual);
   const factorNubes = Math.min(1, nubesPct / 100);
-  horizonte.lerp(grisHorizonte, factorNubes * 0.6);
-  cenit.lerp(grisCenit, factorNubes * 0.85);
+  horizonte.lerp(grisHorizonte, factorNubes * 0.45);
+  cenit.lerp(grisCenit, factorNubes * 0.6);
 
   // Amanecer/atardecer: tiñe de rojizo, más marcado cerca del horizonte
   // que en el cénit (igual que un atardecer real) — se aplica DESPUÉS del
@@ -1406,8 +1421,13 @@ function crearCieloGradiente(elevacion, nocturnidadActual, nubesPct) {
 // saturado y algo más claro, sigue siendo un verde cálido (no un verde
 // frío de césped de campo de fútbol), pero se lee como hierba de verdad
 // en vez de un verde-marrón indefinido.
-const COLOR_HIERBA = 0x6fa350;
-const COLOR_TIERRA = 0x8a6a4a;
+// Pedido explícito (2026-08-18): "haz que los colores sean más vivos, se ve
+// demasiado grisáceo" — subidos de saturación (no solo de luminosidad, ese
+// ajuste ya se hizo en la hierba del checkpoint 10) respecto a los valores
+// anteriores (0x6fa350/0x8a6a4a), que a la luz real de la escena se leían
+// apagados/terrosos en vez de vivos.
+const COLOR_HIERBA = 0x5fae3c;
+const COLOR_TIERRA = 0x9c6f3a;
 
 // Textura del terreno (checkpoint 10, pedido explícito: "añade textura al
 // terreno, un poco de baches y hierbas, algo de barro"). Generada una
@@ -1701,7 +1721,7 @@ function construirIsla(radioIsla, radioHabitacion, nocturnidadActual, geo) {
 // arriba dentro de él — mismo truco que el tronco del árbol/el poste del
 // buzón para que la rotación de balanceo gire desde la base, no desde el
 // centro de la barrita.
-const COLOR_FILAMENTO = 0x8a6a4a;
+const COLOR_FILAMENTO = 0x9c6f3a; // mismo tono que COLOR_TIERRA (más vivo, 2026-08-18) — valor propio, no importado, para no acoplar este bloque al de la isla
 const NUM_FILAMENTOS = 45;
 
 // `geo` + reintento (checkpoint 14, mismo bug/mismo arreglo que las
@@ -1834,8 +1854,8 @@ function construirFarolilloColgante(puntoX, puntoY, puntoZ, factorEncendida, opc
 //     (mismo recurso que los puffs de nube: varias formas simples
 //     solapadas en vez de una figura más compleja) — un contorno
 //     irregular en vez de una bola perfecta, sin modelar hojas de verdad.
-const COLOR_TRONCO = 0x7a5c3e;
-const COLOR_COPA = 0x7a9a5a;
+const COLOR_TRONCO = 0x8a5f34; // más vivo (2026-08-18), a juego con COLOR_TIERRA/COLOR_SUELO
+const COLOR_COPA = 0x62a83e; // más vivo (2026-08-18), a juego con COLOR_HIERBA sin ser idéntico
 const PATRON_COPA = [
   { x: 0, y: 0, escala: 1 },
   { x: -0.55, y: -0.1, escala: 0.72 },

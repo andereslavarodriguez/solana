@@ -1,9 +1,8 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (bug real corregido: días marcados con
-icono de lluvia sin lluvia real, corroborado ahora con la precipitación
-acumulada del día; sol más grande en el icono "parcialmente nublado" —
-ver "Icono de lluvia falso y sol más grande" al final del documento)
+Última actualización: 2026-08-18 (isla más arriba en el encuadre y
+paleta de colores más viva/menos grisácea en la escena 3D — ver "Isla
+más arriba y colores más vivos" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4420,3 +4419,51 @@ en la app cuando Google mostraba 25°.
    lluvia real de verdad sin cambios; icono de sol grande verificado por
    separado (ver punto 2). Sin errores de consola en ningún caso.
    Scripts ad-hoc, no committeados.
+
+### Isla más arriba y colores más vivos (2026-08-18)
+
+Dos pedidos explícitos, escena 3D: "pon la isla un poco más arriba en la
+escena. haz que los colores sean más vivos, se ve demasiado grisáceo".
+
+1. **`construirCamara`: composición asimétrica arriba/abajo, antes solo en
+   retrato — generalizada también a landscape.** El truco ya existente para
+   móvil (más peso relativo hacia `abajo` sube la isla en el encuadre, ver
+   checkpoint "Casa sin scroll...") no tenía equivalente en landscape
+   (`arriba=abajo` simétrico) — se añadieron `FACTOR_ARRIBA_LANDSCAPE=0.9`/
+   `FACTOR_ABAJO_LANDSCAPE=1.1` (suma=2.0, igual que antes, así que el
+   tamaño/zoom no cambia, solo el reparto) y se generalizó también la
+   normalización que evita el achatamiento (checkpoint 16) a ambas
+   orientaciones. **Bug real en el primer intento, encontrado con captura
+   antes de darlo por bueno:** con `ARRIBA=1.1/ABAJO=0.9` la isla bajaba en
+   vez de subir — es la fracción `abajo/(arriba+abajo)` la que sube el
+   punto de mira desde el borde inferior (mismo criterio ya documentado
+   para retrato), así que había que subir `ABAJO`, no `ARRIBA`. También se
+   subió un poco más el sesgo ya existente en retrato
+   (`FACTOR_ARRIBA_RETRATO` 1.8→1.6, `FACTOR_ABAJO_RETRATO` 0.9→1.0).
+   Verificado con capturas en landscape (1280×800), retrato de móvil
+   (393×852) y contra `casa.html` con datos reales (iPhone 13 emulado) que
+   la isla sube de verdad sin cortar el tejado por arriba ni el borde de
+   piedras por abajo, y sin clipping de nubes/farola con 100% de nubosidad.
+
+2. **Paleta más saturada: `COLOR_HIERBA`, `COLOR_TIERRA`, `COLOR_TRONCO`,
+   `COLOR_COPA`, `COLOR_SUELO`, `COLOR_FILAMENTO` (duplicado de
+   `COLOR_TIERRA`, actualizado a juego) — subidos de saturación, no solo de
+   luminosidad (eso ya se había hecho en la textura de hierba del
+   checkpoint 10).** El gris real, sin embargo, salía sobre todo del cielo
+   nublado: `grisHorizonte`/`grisCenit` (`crearCieloGradiente`) eran tonos
+   casi sin saturación (`0xd6cec2`/`0xb3a99a`) que con mucha nubosidad
+   dejaban el cielo entero plano y gris — sustituidos por un dorado/ámbar
+   apagado más saturado (`0xdcc79a`/`0xac9668`) y mezclados con menos fuerza
+   (0.6→0.45, 0.85→0.6) para que el azul vivo de base siga asomando incluso
+   con 100% de nubes, en vez de quedar tapado del todo. Verificado con
+   capturas a 0%/90%/100% de nubosidad, de día y de noche: el cielo
+   despejado se ve igual que antes (esos valores no se tocaron), y el cielo
+   muy nublado deja de leerse como una mancha gris plana.
+
+3. **Verificación:** `npm test` (171 casos, sin cambios — el trabajo es
+   íntegramente de la capa impura de `escena3d/escena.js`, sin tests puros
+   propios, mismo criterio que el resto del fichero) y `npm run build` sin
+   errores. Visual con `scripts/captura-escena3d.mjs` (landscape, retrato,
+   despejado, 90-100% de nubes, noche) y con un script ad-hoc contra
+   `casa.html` con datos reales (no committeado) — sin errores de consola
+   en ningún caso.
