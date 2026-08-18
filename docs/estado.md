@@ -1,8 +1,8 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (arrastre con un dedo para panear la
-escena 3D, además del pellizco para zoom — ver "Paneo con un dedo" al
-final del documento)
+Última actualización: 2026-08-18 (el paneo ya no funciona con el zoom
+mínimo, para que la isla siempre quede centrada al alejar el zoom del
+todo — ver "Límite de paneo atado al zoom" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3892,3 +3892,39 @@ dejando claro que seguía sin querer ningún cambio de ángulo, solo poder
    verificación que el cambio anterior), y un arrastre de un dedo
    posterior desplaza de verdad lo que se ve en pantalla (otra esquina de
    la casa/la isla queda centrada) sin ningún salto ni error de consola.
+
+### Límite de paneo atado al zoom (2026-08-18)
+
+Pedido explícito, mismo día: "haz que cuando se haga el mínimo zoom
+posible... no haya posibilidad de moverse hacia los lados. si no, queda
+raro que quites el zoom y la isla no esté en medio" — el paneo del
+cambio anterior usaba un límite fijo (`radio×0.7`) sin relación con el
+zoom, así que se podía dejar la vista descentrada incluso con el zoom ya
+en el mínimo (toda la escena visible, sin ningún margen real que
+recorrer).
+
+1. **`limitePanActual()` sustituye la constante fija — el límite de
+   paneo pasa a depender linealmente del zoom actual: 0 en `ZOOM_MIN`
+   (nada de margen que recorrer, así que nada que panear), hasta
+   `LIMITE_PAN` en `ZOOM_MAX`.** Con el zoom mínimo, cualquier arrastre
+   queda recortado a 0 al instante — "no haya posibilidad de moverse
+   hacia los lados" se cumple sin necesitar un caso especial aparte, es
+   solo el caso límite de la misma fórmula.
+
+2. **`recortarPan()` se llama también cada vez que cambia el zoom por
+   pellizco (no solo al arrastrar) — necesario para que cerrar el
+   pellizco del todo recentre la isla SOBRE LA MARCHA, no solo la
+   próxima vez que alguien intente arrastrar.** Sin esto, un paneo ya
+   acumulado se habría quedado "colgado" (fuera del nuevo límite, más
+   pequeño) hasta el siguiente gesto de arrastre — quedaría descentrado
+   exactamente en el momento que el pedido explícito quería evitar.
+
+3. **Verificación:** `npm test` (127 casos, sin cambios de resultado) y
+   `npm run build` sin errores. Funcional con `Input.dispatchTouchEvent`
+   (CDP, Playwright) contra `casa.html`: un arrastre con el zoom ya en el
+   mínimo no mueve nada (captura idéntica a la inicial, pixel a pixel);
+   con el zoom ampliado, el mismo arrastre sí desplaza la vista con
+   normalidad; y cerrar el pellizco hasta el zoom mínimo después de
+   panear devuelve la isla exactamente al encuadre inicial, sin ningún
+   arrastre adicional de por medio — confirmado comparando la captura
+   final con la de antes de tocar nada, iguales.

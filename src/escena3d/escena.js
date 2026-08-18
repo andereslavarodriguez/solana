@@ -2809,6 +2809,35 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
   let panDerecha = 0;
   let panArriba = 0;
   const LIMITE_PAN = radio * 0.7;
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 3.5;
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+  // El límite de paneo depende del zoom actual, no es un tope fijo —
+  // pedido explícito: "cuando se haga el mínimo zoom... no haya
+  // posibilidad de moverse hacia los lados. si no, queda raro que quites
+  // el zoom y la isla no esté en medio". Con el zoom mínimo (toda la
+  // escena ya visible, sin margen que recorrer) el límite es 0: cualquier
+  // intento de paneo se recorta a nada. El límite crece de forma lineal
+  // hasta `LIMITE_PAN` en el zoom máximo.
+  function limitePanActual() {
+    const t = clamp((camera.zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN), 0, 1);
+    return LIMITE_PAN * t;
+  }
+  // Recorta el paneo acumulado contra el límite del zoom actual y aplica
+  // solo la diferencia a `camera.position` — se llama tanto al arrastrar
+  // como cada vez que cambia el zoom (no solo al final de un pellizco),
+  // así que alejar el zoom del todo siempre devuelve la isla al centro
+  // sobre la marcha, en vez de dejar un paneo "colgado" a la espera de
+  // otro arrastre.
+  function recortarPan() {
+    const limite = limitePanActual();
+    const nuevoPanDerecha = clamp(panDerecha, -limite, limite);
+    const nuevoPanArriba = clamp(panArriba, -limite, limite);
+    camera.position.addScaledVector(basisDerecha, nuevoPanDerecha - panDerecha);
+    camera.position.addScaledVector(basisArriba, nuevoPanArriba - panArriba);
+    panDerecha = nuevoPanDerecha;
+    panArriba = nuevoPanArriba;
+  }
 
   function redimensionar() {
     const w = contenedor.clientWidth;
@@ -2846,10 +2875,6 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
   // reutiliza `#escena3d-hero`), pero no reserva ningún gesto de la
   // escena para su propio scroll/zoom de página — así los toques llegan
   // aquí para gestionarlos a mano.
-  const ZOOM_MIN = 1;
-  const ZOOM_MAX = 3.5;
-  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-
   let modoToque = null; // 'pan' | 'pinch' | null
   let panToquePrevio = null; // {x,y} en píxeles CSS del dedo único
   let pinchDistanciaInicial = null;
@@ -2895,9 +2920,12 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
       const mundoPorPixelY = (camera.top - camera.bottom) / camera.zoom / contenedor.clientHeight;
       // Arrastrar hacia la izquierda/abajo debe traer contenido de la
       // derecha/arriba al centro -> la cámara se mueve en la dirección
-      // CONTRARIA al arrastre (mismo criterio que arrastrar un mapa).
-      const nuevoPanDerecha = clamp(panDerecha - dxPx * mundoPorPixelX, -LIMITE_PAN, LIMITE_PAN);
-      const nuevoPanArriba = clamp(panArriba + dyPx * mundoPorPixelY, -LIMITE_PAN, LIMITE_PAN);
+      // CONTRARIA al arrastre (mismo criterio que arrastrar un mapa). El
+      // límite es el del zoom ACTUAL, no el fijo — con el zoom mínimo
+      // (`limitePanActual()===0`) el arrastre no mueve nada.
+      const limite = limitePanActual();
+      const nuevoPanDerecha = clamp(panDerecha - dxPx * mundoPorPixelX, -limite, limite);
+      const nuevoPanArriba = clamp(panArriba + dyPx * mundoPorPixelY, -limite, limite);
       camera.position.addScaledVector(basisDerecha, nuevoPanDerecha - panDerecha);
       camera.position.addScaledVector(basisArriba, nuevoPanArriba - panArriba);
       panDerecha = nuevoPanDerecha;
@@ -2908,6 +2936,11 @@ export function crearEscena3D(contenedor, parametrosPiso, sol, clima = {}, luna 
       const factor = distanciaActual / pinchDistanciaInicial;
       camera.zoom = clamp(pinchZoomInicial * factor, ZOOM_MIN, ZOOM_MAX);
       camera.updateProjectionMatrix();
+      // El zoom acaba de cambiar -> el paneo permitido también, y hay que
+      // recortar el ya acumulado contra el nuevo límite ahora mismo (no
+      // solo la próxima vez que se arrastre) para que cerrar el pellizco
+      // del todo recentre la isla sobre la marcha.
+      recortarPan();
     }
   }
   function alSoltarToque(evento) {
