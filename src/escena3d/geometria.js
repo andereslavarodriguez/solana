@@ -24,6 +24,33 @@
 // siendo la única fuente de verdad para la capacidad térmica en
 // termico.js — anchoHabitacion no la sustituye, solo reparte esa área en
 // las dos dimensiones que necesita la caja 3D.
+//
+// Tamaño VISUAL fijo, independiente de la superficie/proporciones reales
+// (pedido explícito: "que la casa tenga siempre la misma superficie
+// visual, que lo único que cambie sea la proporción de esta y el tamaño
+// de las ventanas"). Sin esto, una superficie real mayor agranda la caja
+// de la habitación; `calcularRadioEscena()` (escena.js) aleja la cámara
+// para que quepa entera, y todo lo que no escala con la habitación en sí
+// (árbol, farola, buzón, piedras del muro — atados a `geo.altura` o al
+// radio de la escena) se ve más pequeño en el encuadre sin que nadie lo
+// haya pedido. `escala` se aplica por igual a las 3 dimensiones (ancho,
+// profundidad, alto) — así la superficie de planta dibujada queda fija en
+// SUPERFICIE_REFERENCIA sea cual sea la real, pero la FORMA de la caja
+// (ancho:profundidad según anchoHabitacion, alto según alturaTecho) sigue
+// siendo exactamente la que dictan los parámetros reales, sin distorsión.
+// El mismo `escala` se aplica también al ancho real de cada ventana, para
+// que su proporción respecto a su propia pared (lo único de la ventana
+// que de verdad importa visualmente) coincida con la real.
+//
+// SUPERFICIE_REFERENCIA reproduce a propósito el valor de
+// `superficie` en PARAMETROS_PISO_POR_DEFECTO (src/persistencia/piso.js):
+// con ese valor exacto, `escala` da 1 y la escena no cambia nada respecto
+// a como está calibrada (zoom, isla, farola...) desde la Fase 6. No se
+// importa de piso.js a propósito, para no acoplar este módulo (puro, sin
+// dependencias) a la capa de persistencia por un único valor — mismo
+// criterio ya usado en recalibracion.js.
+const SUPERFICIE_REFERENCIA = 30; // m² (piso.js: superficie por defecto)
+
 const DEG2RAD = Math.PI / 180;
 
 // Vector unitario horizontal para un azimut en convención de brújula.
@@ -39,10 +66,12 @@ function perpendicular({ x, z }) {
 
 export function calcularGeometria(parametrosPiso) {
   const [ventanaA, ventanaB] = parametrosPiso.ventanas;
-  const alturaTecho = parametrosPiso.alturaTecho;
 
-  const anchoLateral = parametrosPiso.anchoHabitacion;
-  const profundidad = parametrosPiso.superficie / anchoLateral;
+  const escala = Math.sqrt(SUPERFICIE_REFERENCIA / parametrosPiso.superficie);
+
+  const alturaTecho = parametrosPiso.alturaTecho * escala;
+  const anchoLateral = parametrosPiso.anchoHabitacion * escala;
+  const profundidad = (parametrosPiso.superficie / parametrosPiso.anchoHabitacion) * escala;
 
   // Eje "profundidad" = normal de la ventana A (pared A al frente, pared B
   // detrás); eje "lateral" = perpendicular, sin datos de ventana.
@@ -71,7 +100,7 @@ export function calcularGeometria(parametrosPiso) {
       ancho: anchoLateral,
       alto: alturaTecho,
       cristal: true,
-      anchoVentana: ventanaA.ancho,
+      anchoVentana: ventanaA.ancho * escala,
     },
     {
       id: 'B',
@@ -81,7 +110,7 @@ export function calcularGeometria(parametrosPiso) {
       ancho: anchoLateral,
       alto: alturaTecho,
       cristal: true,
-      anchoVentana: ventanaB.ancho,
+      anchoVentana: ventanaB.ancho * escala,
     },
     {
       id: 'lateral1',
@@ -117,6 +146,7 @@ export function calcularGeometria(parametrosPiso) {
     anchoLateral,
     profundidad,
     altura: alturaTecho,
+    escala,
     ejeProfundidad,
     ejeLateral,
     paredes,

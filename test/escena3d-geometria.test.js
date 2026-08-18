@@ -80,10 +80,10 @@ caso('las paredes laterales son perpendiculares al eje A-B y opuestas entre sí'
   assert.ok(cerca(dot, 0));
 });
 
-caso('anchoVentana de cada pared de cristal coincide con ventanas[i].ancho', () => {
+caso('anchoVentana de cada pared de cristal coincide con ventanas[i].ancho × escala (con el piso por defecto, escala=1)', () => {
   const [A, B] = geo.paredes;
-  assert.equal(A.anchoVentana, piso.ventanas[0].ancho);
-  assert.equal(B.anchoVentana, piso.ventanas[1].ancho);
+  assert.ok(cerca(A.anchoVentana, piso.ventanas[0].ancho * geo.escala));
+  assert.ok(cerca(B.anchoVentana, piso.ventanas[1].ancho * geo.escala));
 });
 
 caso('las esquinas del suelo coinciden con las esquinas de las paredes (mismo sistema rotado)', () => {
@@ -94,6 +94,64 @@ caso('las esquinas del suelo coinciden con las esquinas de las paredes (mismo si
   assert.ok(cerca(distAaS1, geo.anchoLateral / 2, 0.05));
   // Las 4 esquinas del suelo forman el mismo rectángulo que envuelven las paredes.
   assert.equal(new Set([s1, s2, s3, s4].map((p) => `${p.x.toFixed(3)},${p.z.toFixed(3)}`)).size, 4);
+});
+
+caso('con el piso por defecto (superficie = referencia), la escala es 1: no cambia nada de lo ya calibrado', () => {
+  assert.ok(cerca(geo.escala, 1, 1e-6));
+});
+
+console.log('\n--- calcularGeometria (piso con MÁS superficie que el de referencia: 120m², resto igual) ---');
+
+const pisoGrande = { ...piso, superficie: 120 };
+const geoGrande = calcularGeometria(pisoGrande);
+console.log('geoGrande:', JSON.stringify(geoGrande, null, 2));
+
+caso('la superficie de planta DIBUJADA (anchoLateral × profundidad) es la misma que con el piso por defecto, pese a tener 4× más superficie real', () => {
+  const superficieDibujadaDefecto = geo.anchoLateral * geo.profundidad;
+  const superficieDibujadaGrande = geoGrande.anchoLateral * geoGrande.profundidad;
+  assert.ok(cerca(superficieDibujadaDefecto, superficieDibujadaGrande, 0.001));
+});
+
+caso('la PROPORCIÓN ancho:profundidad dibujada sigue siendo la real (anchoHabitacion/profundidad real) — la escala no la distorsiona, solo cambia el tamaño global', () => {
+  const proporcionRealGrande = pisoGrande.anchoHabitacion / (pisoGrande.superficie / pisoGrande.anchoHabitacion);
+  const proporcionDibujadaGrande = geoGrande.anchoLateral / geoGrande.profundidad;
+  assert.ok(cerca(proporcionRealGrande, proporcionDibujadaGrande, 0.001));
+  // Y es distinta de la del piso por defecto (más superficie con el mismo
+  // anchoHabitacion SÍ cambia la proporción real ancho:profundidad —
+  // comportamiento correcto, no lo que fija la escala).
+  const proporcionDefecto = geo.anchoLateral / geo.profundidad;
+  assert.ok(Math.abs(proporcionDibujadaGrande - proporcionDefecto) > 0.1);
+});
+
+caso('la altura también se escala uniformemente (misma escala que ancho/profundidad, no queda desproporcionada)', () => {
+  assert.ok(cerca(geoGrande.altura / geo.altura, geoGrande.escala, 1e-6));
+});
+
+caso('el ancho de ventana dibujado se escala igual que la pared que lo contiene: la proporción ventana/pared real no cambia', () => {
+  const [Adefecto] = geo.paredes;
+  const [Agrande] = geoGrande.paredes;
+  const proporcionDefecto = Adefecto.anchoVentana / Adefecto.ancho;
+  const proporcionGrande = Agrande.anchoVentana / Agrande.ancho;
+  assert.ok(cerca(proporcionDefecto, proporcionGrande, 0.001));
+});
+
+caso('con más superficie real, la escala visual es menor que 1 (la casa se "encoge" para caber en el mismo tamaño dibujado)', () => {
+  assert.ok(geoGrande.escala < 1);
+});
+
+console.log('\n--- calcularGeometria (piso con MENOS superficie: 10m²) ---');
+
+const pisoPequeno = { ...piso, superficie: 10 };
+const geoPequeno = calcularGeometria(pisoPequeno);
+
+caso('con menos superficie real, la escala visual es mayor que 1 (la casa se "agranda" hasta el mismo tamaño dibujado)', () => {
+  assert.ok(geoPequeno.escala > 1);
+});
+
+caso('la superficie de planta dibujada también coincide con la de referencia en el caso pequeño', () => {
+  const superficieDibujadaPequeno = geoPequeno.anchoLateral * geoPequeno.profundidad;
+  const superficieDibujadaDefecto = geo.anchoLateral * geo.profundidad;
+  assert.ok(cerca(superficieDibujadaPequeno, superficieDibujadaDefecto, 0.001));
 });
 
 console.log(`\n${ok} casos OK (geometria.js)`);

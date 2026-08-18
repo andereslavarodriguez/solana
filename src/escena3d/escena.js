@@ -93,66 +93,124 @@ function signoHaciaCamara(pared, dirCamaraXZ) {
   return dot >= 0 ? 1 : -1;
 }
 
-function construirPared(pared, signoCamara, entorno, factorSol) {
-  const grosor = pared.cristal ? 0.05 : 0.15;
-  const geometria = new THREE.BoxGeometry(pared.ancho, pared.alto, grosor);
-  // DoubleSide: sin esto, la pared "lejana" desde la cámara (cara frontal
-  // apuntando hacia fuera de la caja, en dirección contraria a la cámara)
-  // no se dibuja en absoluto — con paredes opuestas de cristal (A y B) eso
-  // significa no ver nunca la ventana lejana, justo lo que la cámara de
-  // esquina (ver construirCamara) pretende evitar.
-  // Historial de la opacidad de las paredes opacas: 0.5 y 0.85 causaron
-  // tres problemas por turnos (lavado del suelo, lío de profundidad con
-  // los reflejos del cristal contiguo, contorno de mezcla en el borde de
-  // silueta — este último inherente a cualquier opacidad menor que 1, no
-  // arreglable con depthWrite). Pedido explícito: la pared MÁS CERCANA a la
-  // cámara necesita ser más transparente que la del fondo (para poder ver
-  // el interior), así que ya no comparten un único valor — signoCamara
-  // (+1 = la cámara está del lado de la normal, la pared "cercana") decide
-  // cuál de las dos usar.
+// DoubleSide (en ambos materiales, opaco y cristal): sin esto, la pared
+// "lejana" desde la cámara (cara frontal apuntando hacia fuera de la caja,
+// en dirección contraria a la cámara) no se dibuja en absoluto — con
+// paredes opuestas de cristal (A y B) eso significa no ver nunca la
+// ventana lejana, justo lo que la cámara de esquina (construirCamara)
+// pretende evitar.
+function orientarSegunNormal(objeto, pared) {
+  objeto.position.set(pared.centro.x, pared.centro.y, pared.centro.z);
+  const normal = new THREE.Vector3(pared.normal.x, pared.normal.y, pared.normal.z);
+  const objetivo = new THREE.Vector3(pared.centro.x, pared.centro.y, pared.centro.z).add(normal);
+  objeto.lookAt(objetivo);
+}
+
+// Historial de la opacidad de las paredes opacas: 0.5 y 0.85 causaron tres
+// problemas por turnos (lavado del suelo, lío de profundidad con los
+// reflejos del cristal contiguo, contorno de mezcla en el borde de
+// silueta — este último inherente a cualquier opacidad menor que 1, no
+// arreglable con depthWrite). Pedido explícito: la pared MÁS CERCANA a la
+// cámara necesita ser más transparente que la del fondo (para poder ver el
+// interior), así que ya no comparten un único valor — signoCamara (+1 = la
+// cámara está del lado de la normal, la pared "cercana") decide cuál usar.
+function construirMaterialOpaco(signoCamara) {
   const opacidadParedOpaca = signoCamara === 1 ? OPACIDAD_PARED_OPACA_CERCA : OPACIDAD_PARED_OPACA_LEJOS;
+  return new THREE.MeshStandardMaterial({
+    color: COLOR_PARED,
+    transparent: true,
+    opacity: opacidadParedOpaca,
+    roughness: 0.9,
+    metalness: 0,
+    side: THREE.DoubleSide,
+    depthWrite: true,
+  });
+}
+
+function construirPared(pared, signoCamara, entorno, factorSol) {
+  if (!pared.cristal) {
+    return construirParedOpaca(pared, signoCamara);
+  }
+  return construirParedConVentana(pared, signoCamara, entorno, factorSol);
+}
+
+function construirParedOpaca(pared, signoCamara) {
+  const geometria = new THREE.BoxGeometry(pared.ancho, pared.alto, 0.15);
+  const malla = new THREE.Mesh(geometria, construirMaterialOpaco(signoCamara));
+  orientarSegunNormal(malla, pared);
+  malla.castShadow = true;
+  // receiveShadow — antes solo lo tenía el suelo (construirSuelo): la
+  // sombra del marco de la ventana contigua nunca se notaba sobre una
+  // pared, solo en el suelo. Pedido explícito: que también se vea en la
+  // pared del fondo.
+  malla.receiveShadow = true;
+  malla.userData.esPared = true;
+  return malla;
+}
+
+// Ventana suelo-a-techo pero NO de ancho completo de pared — bug real
+// corregido: antes el cristal ocupaba siempre pared.ancho entero
+// (geo.paredes ya calculaba pared.anchoVentana desde la Fase 6 checkpoint
+// 1, pero ningún consumidor lo usaba), así que editar el ancho de una
+// ventana en Parámetros no tenía ningún efecto visual en la escena. El
+// hueco de cristal se centra en la pared y el resto se rellena con pared
+// opaca a cada lado (mismo material/opacidad que una pared lateral
+// cualquiera, según de qué lado la vea la cámara).
+function construirParedConVentana(pared, signoCamara, entorno, factorSol) {
+  const grupo = new THREE.Group();
+  orientarSegunNormal(grupo, pared);
+  grupo.userData.esPared = true;
+
   // Cristal: roughness casi 0, algo de metalness, y envMap (solo el
   // cristal, no toda la escena — ver crearEscena3D) — pedido explícito de
   // mejorar el realismo dentro del estilo actual, sin texturas externas.
   // Le da al cristal un reflejo sutil del entorno cálido además del brillo
   // especular directo de la luz — sigue siendo un material sencillo, no un
   // cristal físicamente exacto.
-  const material = new THREE.MeshStandardMaterial({
-    color: pared.cristal ? COLOR_CRISTAL : COLOR_PARED,
+  const materialCristal = new THREE.MeshStandardMaterial({
+    color: COLOR_CRISTAL,
     transparent: true,
-    opacity: pared.cristal ? OPACIDAD_CRISTAL : opacidadParedOpaca,
-    roughness: pared.cristal ? 0.02 : 0.9,
-    metalness: pared.cristal ? 0.15 : 0,
-    envMap: pared.cristal ? entorno : null,
+    opacity: OPACIDAD_CRISTAL,
+    roughness: 0.02,
+    metalness: 0.15,
+    envMap: entorno,
     envMapIntensity: 0.6,
     side: THREE.DoubleSide,
-    depthWrite: !pared.cristal,
+    depthWrite: false,
   });
-  const malla = new THREE.Mesh(geometria, material);
+  const cristal = new THREE.Mesh(new THREE.BoxGeometry(pared.anchoVentana, pared.alto, 0.05), materialCristal);
+  // El cristal nunca proyecta sombra (dejaría de entrar sol nunca por esa
+  // ventana, pedido explícito de mantenerlo así desde el checkpoint 3),
+  // pero sí la recibe (la del marco de la ventana contigua, por ejemplo).
+  cristal.castShadow = false;
+  cristal.receiveShadow = true;
+  grupo.add(cristal);
 
-  malla.position.set(pared.centro.x, pared.centro.y, pared.centro.z);
-  // Las paredes opacas sí proyectan sombra; el cristal no (dejaría de
-  // entrar sol nunca por esa ventana, pedido explícito de mantenerlo así
-  // en el checkpoint 3).
-  malla.castShadow = !pared.cristal;
-  // receiveShadow — antes solo lo tenía el suelo (construirSuelo): la
-  // sombra del marco de la ventana contigua nunca se notaba sobre una
-  // pared, solo en el suelo. Pedido explícito: que también se vea en la
-  // pared del fondo.
-  malla.receiveShadow = true;
-
-  // Orientar la pared: su normal (eje +Z local del BoxGeometry, grosor)
-  // debe apuntar en la dirección `pared.normal`.
-  const normal = new THREE.Vector3(pared.normal.x, pared.normal.y, pared.normal.z);
-  const arriba = new THREE.Vector3(0, 1, 0);
-  const objetivo = new THREE.Vector3(pared.centro.x, pared.centro.y, pared.centro.z).add(normal);
-  malla.lookAt(objetivo);
-  malla.userData.esPared = true;
-  if (pared.cristal) {
-    construirReflejosCristal(pared, signoCamara, factorSol).forEach((r) => malla.add(r));
-    construirMarcoVentana(pared).forEach((r) => malla.add(r));
+  // Franjas de pared opaca a los lados del hueco de cristal, solo si el
+  // hueco no ocupa ya toda la pared (validación cruzada de
+  // src/ui/validacion.js ya impide que una ventana sea más ancha que
+  // anchoHabitacion, pero puede coincidir con el ancho exacto).
+  const anchoLado = (pared.ancho - pared.anchoVentana) / 2;
+  if (anchoLado > 0.001) {
+    const materialOpaco = construirMaterialOpaco(signoCamara);
+    [-1, 1].forEach((signo) => {
+      const lado = new THREE.Mesh(new THREE.BoxGeometry(anchoLado, pared.alto, 0.15), materialOpaco);
+      lado.position.set(signo * (pared.anchoVentana / 2 + anchoLado / 2), 0, 0);
+      lado.castShadow = true;
+      lado.receiveShadow = true;
+      grupo.add(lado);
+    });
   }
-  return malla;
+
+  // Marco y reflejos ya se posicionan en espacio LOCAL de la ventana
+  // (hijos de la pared, no de la escena) a partir de `pared.ancho`/`alto`
+  // — se les pasa una copia con `ancho` sustituido por `anchoVentana` para
+  // que encajen en el hueco real del cristal, no en la pared completa.
+  const paredVentana = { ...pared, ancho: pared.anchoVentana };
+  construirReflejosCristal(paredVentana, signoCamara, factorSol).forEach((r) => grupo.add(r));
+  construirMarcoVentana(paredVentana).forEach((r) => grupo.add(r));
+
+  return grupo;
 }
 
 // Marco de la ventana — hijas de la malla de la ventana en su espacio

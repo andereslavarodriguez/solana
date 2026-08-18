@@ -1,8 +1,10 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (el paneo ya no funciona con el zoom
-mínimo, para que la isla siempre quede centrada al alejar el zoom del
-todo — ver "Límite de paneo atado al zoom" al final del documento)
+Última actualización: 2026-08-18 (la casa dibujada mantiene siempre la
+misma superficie visual sea cual sea la superficie/proporciones reales
+del piso, y las ventanas ya se dibujan a su ancho real en vez de ocupar
+siempre la pared entera — ver "Tamaño visual fijo de la casa y ventanas a
+su ancho real" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -3928,3 +3930,99 @@ recorrer).
    panear devuelve la isla exactamente al encuadre inicial, sin ningún
    arrastre adicional de por medio — confirmado comparando la captura
    final con la de antes de tocar nada, iguales.
+
+### Tamaño visual fijo de la casa y ventanas a su ancho real (2026-08-18)
+
+Pedido explícito del usuario: al poner una superficie de piso mayor que la
+usada durante toda la construcción de la Fase 6 (30m², el valor por
+defecto), el árbol, la farola, el buzón y el resto de detalles se veían
+pequeños en proporción — pidió que la casa tenga siempre la misma
+"superficie visual" en el dibujo sea cual sea el valor real de los
+parámetros, y que solo cambien su proporción y el tamaño de las ventanas.
+De paso señaló un segundo bug real, ya presente desde el checkpoint 1 de
+la Fase 6: las ventanas siempre se dibujaban ocupando la pared entera, sin
+importar el ancho real editado en Parámetros.
+
+1. **Causa raíz del primer problema: `calcularRadioEscena()` (escena.js)
+   encuadra la cámara según el tamaño REAL de la habitación, pero el
+   árbol/la farola/el buzón/las piedras del muro están dimensionados a
+   partir de `radioHabitacion`/`geo.altura` — con una habitación más
+   grande, la cámara se aleja para que quepa entera, y todo lo demás
+   encoge en el encuadre sin que nadie lo pidiera (mismo patrón que ya
+   forzó ajustes de zoom/tamaño de isla en varios checkpoints
+   anteriores, aquí en la dirección contraria).** Solución en
+   `geometria.js`, no en `escena.js`: `calcularGeometria()` aplica ahora
+   una `escala = sqrt(SUPERFICIE_REFERENCIA / parametrosPiso.superficie)`
+   uniforme a las 3 dimensiones (`anchoLateral`, `profundidad`,
+   `alturaTecho`) antes de construir nada. Con `SUPERFICIE_REFERENCIA=30`
+   (el mismo valor que `PARAMETROS_PISO_POR_DEFECTO.superficie`,
+   src/persistencia/piso.js — deliberadamente NO importado desde
+   geometria.js, para no acoplar este módulo puro a la capa de
+   persistencia por un único valor, mismo criterio que
+   `recalibracion.js`), `escala=1` con los parámetros por defecto: la
+   escena no cambia nada respecto a como está calibrada desde la Fase 6.
+   Con cualquier otra superficie, la superficie de planta DIBUJADA
+   (`anchoLateral × profundidad`) queda fija en `SUPERFICIE_REFERENCIA` —
+   ni más grande ni más pequeña — mientras que la PROPORCIÓN de la caja
+   (ancho:profundidad según `anchoHabitacion`; alto según `alturaTecho`)
+   sigue siendo exactamente la real, sin distorsión, porque la misma
+   escala se aplica por igual a los 3 ejes. Como el resto de la escena
+   (árbol, farola, isla, muro de piedras) se sigue derivando de
+   `radioHabitacion`/`geo.altura` sin ningún cambio en `escena.js`, todo
+   eso vuelve a quedar automáticamente al tamaño de siempre — no hizo
+   falta tocar ni un valor de escena.js para resolver el problema
+   reportado, la normalización en el origen (geometria.js) ya bastaba.
+
+2. **Segundo bug real, encontrado leyendo el código al investigar el
+   primero: `pared.anchoVentana` (calculado en `geometria.js` desde el
+   checkpoint 1 de la Fase 6) nunca lo leía nadie — `construirPared()`
+   dibujaba el cristal siempre a `pared.ancho` completo, así que editar
+   el ancho de una ventana en Parámetros no tenía ningún efecto visual
+   en la escena.** `construirPared()` se dividió en
+   `construirParedOpaca()` (paredes laterales, sin cambios de
+   comportamiento) y `construirParedConVentana()` (paredes A/B): el
+   cristal ahora mide `pared.anchoVentana` de ancho, centrado en la
+   pared, con el resto rellenado por hasta dos franjas de pared opaca a
+   los lados (mismo material/opacidad que una pared lateral, según
+   `signoCamara` — reutiliza `construirMaterialOpaco()`, extraída del
+   código ya existente en vez de duplicarlo). El marco (`construirMarcoVentana`)
+   y los reflejos (`construirReflejosCristal`) — que solo conocían
+   `pared.ancho`/`pared.alto`, no la distinción ventana/pared entera —
+   siguen intactos: se les pasa una copia de `pared` con `ancho`
+   sustituido por `anchoVentana`, así que encajan en el hueco real del
+   cristal sin tener que tocar ninguna de las dos funciones. La pared con
+   ventana pasó de ser un único `THREE.Mesh` a un `THREE.Group` (cristal
+   + hasta 2 franjas opacas + marco + reflejos, todos hijos con posición
+   en espacio local) — `calcularRadioEscena()` sigue funcionando igual
+   (`Box3().setFromObject()` ya recorre todos los descendientes, no solo
+   el nodo raíz).
+
+3. **El mismo `escala` de la normalización de tamaño se aplica también al
+   ancho real de cada ventana (`ventanaA.ancho * escala`,
+   `ventanaB.ancho * escala`) — resuelve a la vez el segundo pedido
+   explícito del usuario ("que cambie... el tamaño de las ventanas").**
+   Como `escala` es la misma para la pared que la contiene y para la
+   ventana, la PROPORCIÓN ventana/pared (lo único que de verdad se ve)
+   coincide exactamente con la real (`ventana.ancho / anchoHabitacion`),
+   sea cual sea el tamaño visual fijo al que se haya normalizado toda la
+   casa.
+
+4. **Verificación:** `npm test` (146 casos, 8 nuevos en
+   `test/escena3d-geometria.test.js` — superficie dibujada idéntica entre
+   un piso de 30m² y uno de 120m² pese al 4× de superficie real,
+   proporción ancho:profundidad dibujada igual a la real, altura escalada
+   en la misma proporción que ancho/profundidad, proporción
+   ventana/pared invariante, escala>1 con menos superficie real y <1 con
+   más), sin romper ninguno de los 138 ya existentes (el piso por
+   defecto sigue dando `escala=1` exacto, así que ningún valor ya
+   verificado cambió). `npm run build` sin errores. Verificación visual
+   con un script ad-hoc de Playwright (no committeado, mismo patrón que
+   `captura-escena3d.mjs` pero sembrando `localStorage` con
+   `page.addInitScript()` antes de navegar a `escena3d.html`): un piso de
+   150m² con `anchoHabitacion=9` y ventanas de 3.5m/3.0m se dibuja al
+   mismo tamaño visual que el piso por defecto (isla/árbol/farola/buzón
+   del mismo tamaño de siempre), solo que alargado y con las ventanas
+   proporcionalmente más anchas; un piso con ventanas de 0.8m/0.6m
+   (frente a los 2.0m/1.8m reales por defecto) muestra huecos de cristal
+   claramente estrechos con pared opaca visible a los lados, en vez de
+   cristal de pared a pared — sin errores de consola en ningún caso.
