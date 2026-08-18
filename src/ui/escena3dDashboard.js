@@ -19,12 +19,24 @@ import { crearEscena3D } from '../escena3d/escena.js';
 import { obtenerDatosReales } from '../data/adaptador.js';
 import { montarPronosticoExtendido } from './pronosticoExtendido.js';
 import { cargarParametrosPiso } from '../persistencia/piso.js';
+import { cargarPlano } from '../persistencia/plano.js';
+import { ventanasDelModelo, superficieTotal, cajaEnvolvente } from '../model/plano.js';
 import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { posicionSolar } from '../data/sol.js';
 import { faseLunar } from '../data/luna.js';
 
 export async function montarEscena3D(contenedorEscena, contenedorPronostico, storage) {
   const piso = cargarParametrosPiso(storage);
+  // Fase 1 de la generalización a cualquier casa (docs/estado.md):
+  // geometria.js todavía asume una única habitación rectangular con
+  // `anchoHabitacion` (se rediseña en la Fase 3 para dibujar la forma real
+  // del plano) — mientras tanto, se le da la caja englobante de la huella
+  // real como aproximación, para que un plano no rectangular al menos se
+  // encuadre razonablemente en vez de fallar.
+  const plano = cargarPlano(storage);
+  piso.ventanas = ventanasDelModelo(plano);
+  piso.superficie = superficieTotal(plano);
+  piso.anchoHabitacion = cajaEnvolvente(plano).ancho;
   const ubicacion = cargarUbicacion(storage);
   const luna = faseLunar(new Date());
 

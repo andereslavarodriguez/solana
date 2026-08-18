@@ -8,6 +8,8 @@ import {
   superficieTotal,
   ventanasDelModelo,
   validarPlano,
+  cajaEnvolvente,
+  planoDesdeRectangulo,
 } from '../src/model/plano.js';
 
 let ok = 0;
@@ -267,6 +269,75 @@ caso('fusionarEnTramos: un muro largo sin interrupciones es un único tramo', ()
   assert.equal(frontal.length, 2);
   const muro = frontal.find((t) => t.clase === 'muro');
   assert.equal(muro.longitudCeldas, 4);
+});
+
+caso('cajaEnvolvente: forma en L da el ancho/profundidad de la caja que la contiene, no de las celdas', () => {
+  const cols = 4;
+  const filas = 4;
+  const dentro = [
+    ...rectangulo(4, 2),
+    { col: 0, fila: 2 },
+    { col: 1, fila: 2 },
+    { col: 0, fila: 3 },
+    { col: 1, fila: 3 },
+  ];
+  const segmentos = segmentosPerimetro(cols, filas, dentro);
+  marcar(segmentos, 'H', 0, 0, 'ventana');
+  const plano = {
+    cols,
+    filas,
+    tamanoCelda: 0.5,
+    orientacionCasa: 0,
+    segmentos,
+    obstruccionPorFachada: OBSTRUCCION_DE_PRUEBA,
+  };
+  // La L ocupa cols 0-3 (4 celdas) y filas 0-3 (4 celdas) en su caja
+  // englobante, aunque las esquinas (2-3, 2-3) estén vacías.
+  assert.deepEqual(cajaEnvolvente(plano), { ancho: 2, profundidad: 2 });
+});
+
+caso('planoDesdeRectangulo: reproduce un rectángulo equivalente al piso real (30m², ventanas opuestas)', () => {
+  const plano = planoDesdeRectangulo({
+    anchoHabitacion: 4.8,
+    superficie: 30,
+    ventanas: [
+      { orientacion: 248, ancho: 2.0, alturaEdificioEnfrente: 15, distanciaEdificioEnfrente: 45 },
+      { orientacion: 68, ancho: 1.8, alturaEdificioEnfrente: 12, distanciaEdificioEnfrente: 20 },
+    ],
+  });
+
+  assert.equal(plano.orientacionCasa, 248);
+  assert.ok(validarPlano(plano).valido);
+
+  // Redondeo a la resolución de la cuadrícula (0.25m): tolerancia generosa,
+  // no se busca precisión exacta (ver comentario de planoDesdeRectangulo).
+  const superficieAprox = superficieTotal(plano);
+  assert.ok(Math.abs(superficieAprox - 30) < 1.5, `superficie ${superficieAprox} debería rondar 30m²`);
+
+  const ventanas = ventanasDelModelo(plano);
+  assert.equal(ventanas.length, 2);
+  const frontal = ventanas.find((v) => v.orientacion === 248);
+  const trasera = ventanas.find((v) => v.orientacion === 68);
+  assert.ok(frontal && trasera);
+  assert.ok(Math.abs(frontal.ancho - 2.0) < 0.3);
+  assert.ok(Math.abs(trasera.ancho - 1.8) < 0.3);
+  assert.equal(frontal.alturaEdificioEnfrente, 15);
+  assert.equal(trasera.distanciaEdificioEnfrente, 20);
+});
+
+caso('planoDesdeRectangulo: ventanas no exactamente opuestas se asignan a la fachada más cercana', () => {
+  const plano = planoDesdeRectangulo({
+    anchoHabitacion: 5,
+    superficie: 25,
+    ventanas: [
+      { orientacion: 10, ancho: 1.5, alturaEdificioEnfrente: 5, distanciaEdificioEnfrente: 10 },
+      { orientacion: 100, ancho: 1.2, alturaEdificioEnfrente: 3, distanciaEdificioEnfrente: 8 }, // ~90° de la primera -> "derecha"
+    ],
+  });
+  const ventanas = ventanasDelModelo(plano);
+  assert.equal(ventanas.length, 2);
+  assert.ok(ventanas.some((v) => v.orientacion === 10)); // frontal, exacta
+  assert.ok(ventanas.some((v) => v.orientacion === 100)); // derecha, exacta (orientacionCasa+90)
 });
 
 console.log(`\n${ok} casos OK (plano.test.js)\n`);

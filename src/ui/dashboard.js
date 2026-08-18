@@ -10,6 +10,8 @@
 
 import { obtenerDatosReales } from '../data/adaptador.js';
 import { cargarParametrosPiso, guardarParametrosPiso } from '../persistencia/piso.js';
+import { cargarPlano } from '../persistencia/plano.js';
+import { ventanasDelModelo, superficieTotal } from '../model/plano.js';
 import { cargarUbicacion } from '../persistencia/ubicacion.js';
 import { cargarEstadoVentanas, guardarEstadoVentanas } from '../persistencia/estadoVentanas.js';
 import { listarAnotaciones, guardarAnotacion } from '../persistencia/anotaciones.js';
@@ -42,6 +44,15 @@ const ETIQUETAS = [
 
 export function montarDashboard(root, storage) {
   const piso = cargarParametrosPiso(storage);
+  // El plano en cuadrícula (Fase 1 de la generalización a cualquier casa,
+  // ver docs/estado.md) sustituye a `piso.ventanas`/`piso.superficie` como
+  // fuente de verdad — se inyectan aquí, sobrescribiendo lo que hubiera en
+  // el dato guardado, para no tocar el resto de este fichero (recomendarPiso/
+  // pasoGemelo/recalibrar y el propio render ya consumen `piso.ventanas`/
+  // `piso.superficie` tal cual, sin saber de dónde vienen).
+  const plano = cargarPlano(storage);
+  piso.ventanas = ventanasDelModelo(plano);
+  piso.superficie = superficieTotal(plano);
   const ubicacion = cargarUbicacion(storage);
   let estadoVentanas = cargarEstadoVentanas(storage, piso.ventanas);
 

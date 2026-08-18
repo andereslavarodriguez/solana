@@ -28,7 +28,7 @@
 // y (col, fila) ["derecha"]. Convención de ejes (arbitraria pero fija):
 // fila crece hacia la fachada "trasera", columna crece hacia "derecha".
 
-import { orientacionDeFachada } from './paredes.js';
+import { PAREDES, orientacionDeFachada } from './paredes.js';
 
 function claveSegmento(tipo, col, fila) {
   return `${tipo},${col},${fila}`;
@@ -255,4 +255,109 @@ export function validarPlano(plano) {
   }
 
   return { valido: errores.length === 0, errores };
+}
+
+// Caja englobante (ancho × profundidad, en metros) de las celdas
+// interiores — usada por la escena 3D para encuadrar la cámara y colocar
+// decoraciones (árbol/farola/buzón) igual que con la habitación
+// rectangular de antes, sin importar la forma real de la huella (Fase 3,
+// ver docs/estado.md). También sirve de aproximación temporal para
+// `anchoHabitacion` mientras la escena 3D todavía no sabe dibujar
+// directamente la forma real del plano (Fase 1 -> Fase 3).
+export function cajaEnvolvente(plano) {
+  const interior = celdasInteriores(plano);
+  const cols = interior.map((c) => c.col);
+  const filas = interior.map((c) => c.fila);
+  return {
+    ancho: (Math.max(...cols) - Math.min(...cols) + 1) * plano.tamanoCelda,
+    profundidad: (Math.max(...filas) - Math.min(...filas) + 1) * plano.tamanoCelda,
+  };
+}
+
+// --- Migración desde el modelo anterior a esta fase (parametrosPiso con
+// anchoHabitacion + ventanas fijas en paredes opuestas, Fases 1-8) ---
+
+const MIGRACION_TAMANO_CELDA = 0.25; // m/celda — resolución del plano sintético generado al migrar
+
+// A qué fachada relativa corresponde una orientación real dada, cuando
+// `orientacionCasa` es la única referencia disponible (no todas las
+// orientaciones antiguas eran exactamente múltiplos de 90° entre sí) — se
+// queda con la fachada cuya orientación real está más cerca angularmente.
+function facetaMasCercana(orientacionCasa, orientacionReal) {
+  let mejorFaceta = PAREDES[0];
+  let mejorDiferencia = Infinity;
+  for (const faceta of PAREDES) {
+    const real = orientacionDeFachada(orientacionCasa, faceta);
+    const diferencia = Math.min(Math.abs(orientacionReal - real), 360 - Math.abs(orientacionReal - real));
+    if (diferencia < mejorDiferencia) {
+      mejorDiferencia = diferencia;
+      mejorFaceta = faceta;
+    }
+  }
+  return mejorFaceta;
+}
+
+function segmentosRectangulo(cols, filas) {
+  const segmentos = [];
+  for (let col = 0; col < cols; col++) {
+    segmentos.push({ tipo: 'H', col, fila: 0, clase: 'muro' });
+    segmentos.push({ tipo: 'H', col, fila: filas, clase: 'muro' });
+  }
+  for (let fila = 0; fila < filas; fila++) {
+    segmentos.push({ tipo: 'V', col: 0, fila, clase: 'muro' });
+    segmentos.push({ tipo: 'V', col: cols, fila, clase: 'muro' });
+  }
+  return segmentos;
+}
+
+// Marca un tramo centrado de `longitudCeldas` como 'ventana' en la pared
+// exterior de la fachada dada, recortado a la longitud real de esa pared.
+function marcarVentanaMigrada(segmentos, faceta, longitudCeldas, cols, filas) {
+  const encontrar = (tipo, col, fila) => segmentos.find((s) => s.tipo === tipo && s.col === col && s.fila === fila);
+  if (faceta === 'frontal' || faceta === 'trasera') {
+    const filaFija = faceta === 'frontal' ? 0 : filas;
+    const longitud = Math.min(longitudCeldas, cols);
+    const inicio = Math.floor((cols - longitud) / 2);
+    for (let col = inicio; col < inicio + longitud; col++) {
+      encontrar('H', col, filaFija).clase = 'ventana';
+    }
+  } else {
+    const colFija = faceta === 'izquierda' ? 0 : cols;
+    const longitud = Math.min(longitudCeldas, filas);
+    const inicio = Math.floor((filas - longitud) / 2);
+    for (let fila = inicio; fila < inicio + longitud; fila++) {
+      encontrar('V', colFija, fila).clase = 'ventana';
+    }
+  }
+}
+
+// Genera un plano rectangular equivalente a un `parametrosPiso` del
+// esquema anterior a esta fase — para no perder la configuración real de
+// un usuario ya en producción al actualizar (src/persistencia/plano.js la
+// usa como migración) y como plano de referencia del proyecto (piso real
+// de spec.md §3.4). El redondeo a la resolución de la cuadrícula es una
+// aproximación aceptada a propósito (mismo criterio que otros parámetros
+// "elegidos a ojo" del proyecto) — no es una migración con pérdida cero.
+export function planoDesdeRectangulo({ anchoHabitacion, superficie, ventanas }) {
+  const tamanoCelda = MIGRACION_TAMANO_CELDA;
+  const cols = Math.max(1, Math.round(anchoHabitacion / tamanoCelda));
+  const filas = Math.max(1, Math.round(superficie / anchoHabitacion / tamanoCelda));
+  const orientacionCasa = ventanas[0].orientacion;
+
+  const segmentos = segmentosRectangulo(cols, filas);
+  const obstruccionPorFachada = Object.fromEntries(
+    PAREDES.map((faceta) => [faceta, { alturaEdificioEnfrente: 0, distanciaEdificioEnfrente: 100 }]),
+  );
+
+  for (const ventana of ventanas) {
+    const faceta = facetaMasCercana(orientacionCasa, ventana.orientacion);
+    const longitudCeldas = Math.max(1, Math.round(ventana.ancho / tamanoCelda));
+    marcarVentanaMigrada(segmentos, faceta, longitudCeldas, cols, filas);
+    obstruccionPorFachada[faceta] = {
+      alturaEdificioEnfrente: ventana.alturaEdificioEnfrente,
+      distanciaEdificioEnfrente: ventana.distanciaEdificioEnfrente,
+    };
+  }
+
+  return { cols, filas, tamanoCelda, orientacionCasa, segmentos, obstruccionPorFachada };
 }

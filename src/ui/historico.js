@@ -11,6 +11,8 @@
 import { Chart } from 'chart.js/auto';
 import { listarAnotaciones, borrarAnotacion } from '../persistencia/anotaciones.js';
 import { cargarParametrosPiso, guardarParametrosPiso } from '../persistencia/piso.js';
+import { cargarPlano } from '../persistencia/plano.js';
+import { superficieTotal } from '../model/plano.js';
 import { construirFilasRegresion, recalibrar, VENTANA_RECALIBRACION } from '../model/recalibracion.js';
 import { insertarNavInferior } from './navInferior.js';
 import { iconoBorrar } from './iconos.js';
@@ -19,6 +21,9 @@ export function montarHistorico(root, storage) {
   function render() {
     const anotaciones = listarAnotaciones(storage);
     const piso = cargarParametrosPiso(storage);
+    // Fase 1 de la generalización a cualquier casa (docs/estado.md): la
+    // superficie ya no se guarda a mano, se deriva del plano en cuadrícula.
+    piso.superficie = superficieTotal(cargarPlano(storage));
 
     root.innerHTML = plantilla(anotaciones, piso);
     insertarNavInferior('historico');
@@ -52,6 +57,7 @@ export function montarHistorico(root, storage) {
 
     const anotaciones = listarAnotaciones(storage);
     const piso = cargarParametrosPiso(storage);
+    piso.superficie = superficieTotal(cargarPlano(storage));
     const filas = construirFilasRegresion(anotaciones);
     const resultado = recalibrar(filas, piso);
     if (resultado) {
