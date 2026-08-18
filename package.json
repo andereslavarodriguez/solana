@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/model.test.js && node test/gemelo.test.js && node test/recalibracion.test.js && node test/persistencia.test.js && node test/ubicacion.test.js && node test/validacion.test.js && node test/estadoVentanas.test.js && node test/antiguedadAnotacion.test.js && node test/escena3d-geometria.test.js && node test/escena3d-iluminacion.test.js && node test/etiquetaVentana.test.js && node test/openMeteo.test.js && node test/pronosticoExtendido.test.js",
+    "test": "node test/model.test.js && node test/gemelo.test.js && node test/recalibracion.test.js && node test/persistencia.test.js && node test/ubicacion.test.js && node test/validacion.test.js && node test/estadoVentanas.test.js && node test/antiguedadAnotacion.test.js && node test/escena3d-geometria.test.js && node test/escena3d-iluminacion.test.js && node test/etiquetaVentana.test.js && node test/openMeteo.test.js && node test/pronosticoExtendido.test.js && node test/paredes.test.js && node test/plano.test.js",
     "test:datos": "node test/datos-reales.test.js"
   },
   "dependencies": {
