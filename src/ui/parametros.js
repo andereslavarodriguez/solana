@@ -4,15 +4,17 @@
 // valores y conecta la validación con el guardado.
 //
 // Dos secciones visualmente distintas (decisión anotada en docs/estado.md):
-// "Datos fijos del piso" (superficie, altura, ubicación, banda de confort,
-// ventanas) y "Parámetros del modelo" (UA, factorCapacidad, SHGC,
-// renovacionesHora), estos últimos con una nota explícita de que la Fase 7
-// los recalibra automáticamente y puede sobrescribir una edición manual.
+// "Datos fijos del piso" (ubicación, altura de techo, banda de confort) y
+// "Parámetros del modelo" (UA, factorCapacidad, SHGC, renovacionesHora),
+// estos últimos con una nota explícita de que la Fase 7 los recalibra
+// automáticamente y puede sobrescribir una edición manual. La forma de la
+// casa, sus ventanas y la superficie se editan aparte, en el editor de
+// plano en cuadrícula (src/ui/plano.js, ver docs/estado.md) — enlazado
+// desde aquí, no en esta pantalla.
 
 import { cargarParametrosPiso, guardarParametrosPiso } from '../persistencia/piso.js';
 import { cargarUbicacion, guardarUbicacion } from '../persistencia/ubicacion.js';
 import { validarParametrosPiso, validarUbicacion, validarCampoNumerico, RANGOS } from './validacion.js';
-import { etiquetaCompass } from './etiquetaVentana.js';
 import { insertarNavInferior } from './navInferior.js';
 
 export function montarPantallaParametros(root, storage) {
@@ -55,19 +57,16 @@ function plantilla(piso, ubicacion) {
         ${campoNumerico('lon', 'Longitud', ubicacion.lon, RANGOS.lon, '0.0001')}
 
         <h2>Piso</h2>
-        ${campoNumerico('superficie', 'Superficie (m²)', piso.superficie, RANGOS.superficie, '0.5')}
         ${campoNumerico('alturaTecho', 'Altura de techo (m)', piso.alturaTecho, RANGOS.alturaTecho, '0.05')}
-        ${campoNumerico('anchoHabitacion', 'Ancho de la habitación (m)', piso.anchoHabitacion, RANGOS.anchoHabitacion, '0.1')}
         <p class="nota">
-          Solo para la escena 3D: el lado perpendicular al eje de las dos ventanas.
-          La profundidad se calcula sola como superficie ÷ este ancho.
+          La forma de la casa, sus ventanas y la superficie ya no se editan
+          aquí — se dibujan en el plano.
         </p>
+        <a href="plano.html" class="enlace-plano">Editar el plano de la casa ›</a>
 
         <h2>Banda de confort</h2>
         ${campoNumerico('bandaConfortMin', 'Mínimo (°C)', piso.bandaConfort.min, RANGOS.bandaConfortMin, '0.5')}
         ${campoNumerico('bandaConfortMax', 'Máximo (°C)', piso.bandaConfort.max, RANGOS.bandaConfortMax, '0.5')}
-
-        ${piso.ventanas.map((ventana, i) => plantillaVentana(ventana, i)).join('')}
       </fieldset>
 
       <fieldset class="seccion seccion-calibrable">
@@ -87,17 +86,6 @@ function plantilla(piso, ubicacion) {
       <button type="submit">Guardar</button>
       <p id="mensaje-guardado" role="status"></p>
     </form>
-  `;
-}
-
-function plantillaVentana(ventana, i) {
-  return `
-    <h2>Ventana ${ventana.nombre} — ${etiquetaCompass(ventana.orientacion)}</h2>
-    <input type="hidden" id="ventana-${i}-nombre" name="ventana-${i}-nombre" value="${ventana.nombre}" />
-    ${campoNumerico(`ventana-${i}-orientacion`, 'Orientación (°)', ventana.orientacion, RANGOS.ventanaOrientacion, '1')}
-    ${campoNumerico(`ventana-${i}-ancho`, 'Ancho (m)', ventana.ancho, RANGOS.ventanaAncho, '0.05')}
-    ${campoNumerico(`ventana-${i}-alturaEdificioEnfrente`, 'Altura edificio enfrente (m)', ventana.alturaEdificioEnfrente, RANGOS.alturaEdificioEnfrente, '1')}
-    ${campoNumerico(`ventana-${i}-distanciaEdificioEnfrente`, 'Distancia edificio enfrente (m)', ventana.distanciaEdificioEnfrente, RANGOS.distanciaEdificioEnfrente, '1')}
   `;
 }
 
@@ -129,8 +117,6 @@ function aplicarError(input, mensaje) {
 function claveAId(clave) {
   if (clave === 'bandaConfort.min') return 'bandaConfortMin';
   if (clave === 'bandaConfort.max') return 'bandaConfortMax';
-  const coincidencia = clave.match(/^ventanas\.(\d+)\.(.+)$/);
-  if (coincidencia) return `ventana-${coincidencia[1]}-${coincidencia[2]}`;
   return clave;
 }
 
@@ -138,22 +124,13 @@ function leerFormulario(form) {
   const campo = (nombre) => form.elements.namedItem(nombre).value;
 
   const piso = {
-    superficie: campo('superficie'),
     alturaTecho: campo('alturaTecho'),
-    anchoHabitacion: campo('anchoHabitacion'),
     UA: campo('UA'),
     factorCapacidad: campo('factorCapacidad'),
     SHGC: campo('SHGC'),
     renovacionesHora: campo('renovacionesHora'),
     fraccionVentPersianaBajada: campo('fraccionVentPersianaBajada'),
     bandaConfort: { min: campo('bandaConfortMin'), max: campo('bandaConfortMax') },
-    ventanas: [0, 1].map((i) => ({
-      nombre: campo(`ventana-${i}-nombre`),
-      orientacion: campo(`ventana-${i}-orientacion`),
-      ancho: campo(`ventana-${i}-ancho`),
-      alturaEdificioEnfrente: campo(`ventana-${i}-alturaEdificioEnfrente`),
-      distanciaEdificioEnfrente: campo(`ventana-${i}-distanciaEdificioEnfrente`),
-    })),
   };
 
   const ubicacion = { lat: campo('lat'), lon: campo('lon') };
@@ -163,22 +140,13 @@ function leerFormulario(form) {
 
 function normalizarPiso(piso) {
   return {
-    superficie: Number(piso.superficie),
     alturaTecho: Number(piso.alturaTecho),
-    anchoHabitacion: Number(piso.anchoHabitacion),
     UA: Number(piso.UA),
     factorCapacidad: Number(piso.factorCapacidad),
     SHGC: Number(piso.SHGC),
     renovacionesHora: Number(piso.renovacionesHora),
     fraccionVentPersianaBajada: Number(piso.fraccionVentPersianaBajada),
     bandaConfort: { min: Number(piso.bandaConfort.min), max: Number(piso.bandaConfort.max) },
-    ventanas: piso.ventanas.map((ventana) => ({
-      nombre: ventana.nombre,
-      orientacion: Number(ventana.orientacion),
-      ancho: Number(ventana.ancho),
-      alturaEdificioEnfrente: Number(ventana.alturaEdificioEnfrente),
-      distanciaEdificioEnfrente: Number(ventana.distanciaEdificioEnfrente),
-    })),
   };
 }
 

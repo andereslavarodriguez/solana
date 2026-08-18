@@ -8,9 +8,7 @@
 // type="number"> en la UI, para no duplicarlos.
 
 export const RANGOS = {
-  superficie: { min: 5, max: 200 },
   alturaTecho: { min: 2.0, max: 4.0 },
-  anchoHabitacion: { min: 2, max: 15 },
   UA: { min: 5, max: 300 },
   factorCapacidad: { min: 1, max: 20 },
   SHGC: { min: 0, max: 1 },
@@ -18,8 +16,6 @@ export const RANGOS = {
   fraccionVentPersianaBajada: { min: 0, max: 1 },
   bandaConfortMin: { min: 10, max: 30 },
   bandaConfortMax: { min: 10, max: 30 },
-  ventanaOrientacion: { min: 0, max: 360 },
-  ventanaAncho: { min: 0.3, max: 10 },
   alturaEdificioEnfrente: { min: 0, max: 200 },
   distanciaEdificioEnfrente: { min: 1, max: 500 },
   lat: { min: -90, max: 90 },
@@ -28,6 +24,13 @@ export const RANGOS = {
   // generoso de plausibilidad para un interior habitado, no una banda de
   // confort (esa es bandaConfort, un parámetro aparte).
   temperaturaInterior: { min: 0, max: 45 },
+  // Editor de plano en cuadrícula (Fase 2 de la generalización a cualquier
+  // casa, ver docs/estado.md) — sustituye a los antiguos anchoHabitacion/
+  // superficie/ventanas de esta pantalla, ahora en src/ui/plano.js.
+  planoCols: { min: 5, max: 40 },
+  planoFilas: { min: 5, max: 40 },
+  tamanoCelda: { min: 0.1, max: 2 },
+  orientacionCasa: { min: 0, max: 360 },
 };
 
 export function validarCampoNumerico(valor, rango) {
@@ -49,9 +52,7 @@ function validarCampo(errores, clave, valor, rango) {
 export function validarParametrosPiso(datos) {
   const errores = {};
 
-  validarCampo(errores, 'superficie', datos.superficie, RANGOS.superficie);
   validarCampo(errores, 'alturaTecho', datos.alturaTecho, RANGOS.alturaTecho);
-  validarCampo(errores, 'anchoHabitacion', datos.anchoHabitacion, RANGOS.anchoHabitacion);
   validarCampo(errores, 'UA', datos.UA, RANGOS.UA);
   validarCampo(errores, 'factorCapacidad', datos.factorCapacidad, RANGOS.factorCapacidad);
   validarCampo(errores, 'SHGC', datos.SHGC, RANGOS.SHGC);
@@ -69,36 +70,6 @@ export function validarParametrosPiso(datos) {
     if (Number(datos.bandaConfort.min) >= Number(datos.bandaConfort.max)) {
       errores['bandaConfort.max'] = 'Debe ser mayor que el mínimo de la banda';
     }
-  }
-
-  (datos.ventanas || []).forEach((ventana, i) => {
-    validarCampo(errores, `ventanas.${i}.orientacion`, ventana.orientacion, RANGOS.ventanaOrientacion);
-    validarCampo(errores, `ventanas.${i}.ancho`, ventana.ancho, RANGOS.ventanaAncho);
-    validarCampo(
-      errores,
-      `ventanas.${i}.alturaEdificioEnfrente`,
-      ventana.alturaEdificioEnfrente,
-      RANGOS.alturaEdificioEnfrente,
-    );
-    validarCampo(
-      errores,
-      `ventanas.${i}.distanciaEdificioEnfrente`,
-      ventana.distanciaEdificioEnfrente,
-      RANGOS.distanciaEdificioEnfrente,
-    );
-  });
-
-  // La ventana no puede ser más ancha que la propia pared que la contiene
-  // (geometria.js, Fase 6, dibuja el hueco de cristal dentro de esa pared).
-  const anchosVentanaValidos = (datos.ventanas || []).every(
-    (_, i) => !errores[`ventanas.${i}.ancho`],
-  );
-  if (!errores.anchoHabitacion && anchosVentanaValidos) {
-    (datos.ventanas || []).forEach((ventana, i) => {
-      if (Number(ventana.ancho) >= Number(datos.anchoHabitacion)) {
-        errores[`ventanas.${i}.ancho`] = 'Debe ser menor que el ancho de la habitación';
-      }
-    });
   }
 
   return { valido: Object.keys(errores).length === 0, errores };

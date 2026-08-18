@@ -49,13 +49,6 @@ caso('valores por defecto -> válido, sin errores', () => {
   assert.deepEqual(errores, {});
 });
 
-caso('superficie fuera de rango -> inválido con error en "superficie"', () => {
-  const datos = { ...PARAMETROS_PISO_POR_DEFECTO, superficie: 500 };
-  const { valido, errores } = validarParametrosPiso(datos);
-  assert.equal(valido, false);
-  assert.equal(errores.superficie, `Debe estar entre ${RANGOS.superficie.min} y ${RANGOS.superficie.max}`);
-});
-
 caso('SHGC no numérico -> inválido con error en "SHGC"', () => {
   const datos = { ...PARAMETROS_PISO_POR_DEFECTO, SHGC: 'mucho' };
   const { valido, errores } = validarParametrosPiso(datos);
@@ -84,54 +77,6 @@ caso('bandaConfort.min == bandaConfort.max -> inválido (no basta con no ser men
   const datos = { ...PARAMETROS_PISO_POR_DEFECTO, bandaConfort: { min: 22, max: 22 } };
   const { valido } = validarParametrosPiso(datos);
   assert.equal(valido, false);
-});
-
-caso('ventana con orientación fuera de rango -> error indexado "ventanas.0.orientacion"', () => {
-  const datos = {
-    ...PARAMETROS_PISO_POR_DEFECTO,
-    ventanas: [
-      { ...PARAMETROS_PISO_POR_DEFECTO.ventanas[0], orientacion: 400 },
-      PARAMETROS_PISO_POR_DEFECTO.ventanas[1],
-    ],
-  };
-  const { valido, errores } = validarParametrosPiso(datos);
-  assert.equal(valido, false);
-  assert.equal(errores['ventanas.0.orientacion'], `Debe estar entre ${RANGOS.ventanaOrientacion.min} y ${RANGOS.ventanaOrientacion.max}`);
-  assert.equal(errores['ventanas.1.orientacion'], undefined);
-});
-
-caso('ventana con distancia a edificio = 0 -> inválido (evita división por cero en sombra.js)', () => {
-  const datos = {
-    ...PARAMETROS_PISO_POR_DEFECTO,
-    ventanas: [
-      { ...PARAMETROS_PISO_POR_DEFECTO.ventanas[0], distanciaEdificioEnfrente: 0 },
-      PARAMETROS_PISO_POR_DEFECTO.ventanas[1],
-    ],
-  };
-  const { valido, errores } = validarParametrosPiso(datos);
-  assert.equal(valido, false);
-  assert.equal(errores['ventanas.0.distanciaEdificioEnfrente'], `Debe estar entre ${RANGOS.distanciaEdificioEnfrente.min} y ${RANGOS.distanciaEdificioEnfrente.max}`);
-});
-
-caso('anchoHabitacion fuera de rango -> inválido con error en "anchoHabitacion"', () => {
-  const datos = { ...PARAMETROS_PISO_POR_DEFECTO, anchoHabitacion: 1 };
-  const { valido, errores } = validarParametrosPiso(datos);
-  assert.equal(valido, false);
-  assert.equal(errores.anchoHabitacion, `Debe estar entre ${RANGOS.anchoHabitacion.min} y ${RANGOS.anchoHabitacion.max}`);
-});
-
-caso('ventana más ancha que anchoHabitacion -> inválido con error en "ventanas.0.ancho"', () => {
-  const datos = {
-    ...PARAMETROS_PISO_POR_DEFECTO,
-    anchoHabitacion: 3,
-    ventanas: [
-      { ...PARAMETROS_PISO_POR_DEFECTO.ventanas[0], ancho: 4 },
-      PARAMETROS_PISO_POR_DEFECTO.ventanas[1],
-    ],
-  };
-  const { valido, errores } = validarParametrosPiso(datos);
-  assert.equal(valido, false);
-  assert.equal(errores['ventanas.0.ancho'], 'Debe ser menor que el ancho de la habitación');
 });
 
 console.log('\n--- validarUbicacion (§3.1) ---');

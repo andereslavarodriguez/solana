@@ -960,3 +960,130 @@ button.interruptor.activo .interruptor-bola {
 body:has(.nav-inferior) #app:not(#app-compacto) {
   padding-bottom: calc(4.2rem + env(safe-area-inset-bottom, 0));
 }
+
+/* Editor de plano en cuadrícula (Fase 2 de la generalización a cualquier
+   casa, ver docs/estado.md) — sustituye a los campos de anchoHabitacion/
+   ventanas de la pantalla de parámetros. */
+
+.enlace-volver {
+  display: block;
+  color: var(--texto-suave);
+  text-decoration: none;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.enlace-volver:hover {
+  color: var(--acento-oscuro);
+}
+
+.enlace-plano {
+  display: inline-block;
+  color: var(--acento-oscuro);
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid var(--acento);
+  margin: 0.25rem 0 0.75rem;
+}
+
+.enlace-plano:hover {
+  color: var(--acento);
+}
+
+.plano-superficie {
+  color: var(--texto-suave);
+}
+
+.plano-superficie strong {
+  color: var(--texto);
+  font-family: var(--tipo-titular);
+}
+
+.plano-herramientas {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* `button.plano-herramienta` (no solo `.plano-herramienta`): mismo motivo
+   que button.boton-icono más arriba — igualar la especificidad de
+   `button[type='button']` (elemento+atributo) para que el estilo de aquí
+   gane por orden de declaración. */
+button.plano-herramienta {
+  font-size: 0.85rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--borde);
+  border-radius: 0.15rem;
+  background: var(--papel);
+  color: var(--texto);
+  cursor: pointer;
+}
+
+button.plano-herramienta.activa {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+}
+
+.plano-lienzo {
+  border: 1px solid var(--borde);
+  border-radius: 0.2rem;
+  background: var(--papel);
+  overflow-x: auto;
+  margin-bottom: 0.5rem;
+}
+
+.plano-svg {
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  touch-action: manipulation;
+}
+
+.plano-guia {
+  stroke: var(--borde);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.plano-celda-interior {
+  fill: var(--acento-fondo);
+  pointer-events: none;
+}
+
+.plano-arista {
+  cursor: pointer;
+}
+
+.plano-hit {
+  fill: transparent;
+}
+
+.plano-segmento {
+  pointer-events: none;
+  stroke-linecap: square;
+}
+
+.plano-segmento-muro {
+  stroke: var(--texto);
+  stroke-width: 4;
+}
+
+.plano-segmento-puerta {
+  stroke: var(--aviso);
+  stroke-width: 4;
+  stroke-dasharray: 3 3;
+}
+
+.plano-segmento-ventana {
+  stroke: #3a7ca8;
+  stroke-width: 4;
+}
+
+.plano-errores {
+  color: var(--error);
+  font-size: 0.9rem;
+  padding-left: 1.1rem;
+  margin: 0.5rem 0 1rem;
+}
