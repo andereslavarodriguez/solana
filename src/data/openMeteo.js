@@ -41,6 +41,27 @@ export function categoriaTiempo(codigoTiempo) {
   return 'nublado'; // 3 (cubierto), 45/48 (niebla) y cualquier código no reconocido
 }
 
+// Bug real reportado: días marcados como "lluvia" en el pronóstico
+// extendido sin que lloviera de verdad. Causa confirmada con una petición
+// real a Open-Meteo: `daily.weather_code` es "el código más severo del
+// día" y puede marcar llovizna/lluvia/nieve/tormenta con
+// `precipitation_sum` en 0.0mm el mismo día (visto en producción: código
+// 55 "llovizna densa" con 0.0mm real). Para el resumen de UN DÍA (no para
+// una hora suelta, donde el código ya corresponde a ese instante
+// concreto) se corrobora con la precipitación acumulada real: por debajo
+// del umbral, se trata como "nublado" en vez de aparentar una
+// lluvia/nieve/tormenta que el propio dato de precipitación desmiente.
+const UMBRAL_PRECIPITACION_ICONO_MM = 0.2;
+const CATEGORIAS_DE_PRECIPITACION = new Set(['lluvia', 'nieve', 'tormenta']);
+
+export function categoriaTiempoDia(codigoTiempo, precipitacionSumMm) {
+  const categoria = categoriaTiempo(codigoTiempo);
+  if (CATEGORIAS_DE_PRECIPITACION.has(categoria) && precipitacionSumMm < UMBRAL_PRECIPITACION_ICONO_MM) {
+    return 'nublado';
+  }
+  return categoria;
+}
+
 // Pide clima real en resolución de 15 minutos. Con past_minutely_15 por
 // defecto (0), el primer punto devuelto es el más cercano al instante
 // actual, y los siguientes `pasos` cubren el pronóstico
@@ -77,7 +98,10 @@ export async function obtenerPronosticoExtendido(lat, lon) {
   url.searchParams.set('latitude', lat);
   url.searchParams.set('longitude', lon);
   url.searchParams.set('hourly', 'temperature_2m,weather_code');
-  url.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min');
+  // precipitation_sum: corrobora daily.weather_code para el icono de cada
+  // día (ver categoriaTiempoDia) — sin ella no hay forma de distinguir un
+  // código de lluvia real de uno que Open-Meteo marca sin lluvia medida.
+  url.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum');
   url.searchParams.set('forecast_days', '7');
   url.searchParams.set('timezone', 'auto');
 

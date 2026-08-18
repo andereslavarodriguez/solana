@@ -7,7 +7,7 @@
 // 6-8h, sigue siendo la única fuente para eso), así que usa su propia
 // llamada a Open-Meteo (obtenerPronosticoExtendido).
 
-import { categoriaTiempo, obtenerPronosticoExtendido } from '../data/openMeteo.js';
+import { categoriaTiempo, categoriaTiempoDia, obtenerPronosticoExtendido } from '../data/openMeteo.js';
 import { posicionSolar } from '../data/sol.js';
 import {
   iconoSol,
@@ -125,7 +125,11 @@ export function seleccionarDias(daily) {
     fecha: new Date(`${t}T00:00`),
     tempMax: daily.temperature_2m_max[i],
     tempMin: daily.temperature_2m_min[i],
-    categoria: categoriaTiempo(daily.weather_code[i]),
+    // categoriaTiempoDia, no categoriaTiempo a secas: corrobora con la
+    // precipitación real del día (bug real corregido, ver
+    // src/data/openMeteo.js) — sin esto, algunos días salían con icono de
+    // lluvia sin lluvia real.
+    categoria: categoriaTiempoDia(daily.weather_code[i], daily.precipitation_sum[i]),
   }));
 }
 

@@ -143,12 +143,25 @@ caso('deriva fecha/máx/mín/categoría de cada día, en el mismo orden', () => 
     temperature_2m_max: [30, 25],
     temperature_2m_min: [18, 15],
     weather_code: [0, 61],
+    precipitation_sum: [0, 3.2],
   };
   const dias = seleccionarDias(daily);
   assert.equal(dias.length, 2);
   assert.equal(dias[0].tempMax, 30);
   assert.equal(dias[1].categoria, 'lluvia');
   assert.equal(dias[0].fecha.getDate(), 18); // parseo en hora local, no medianoche UTC
+});
+
+caso('bug real corregido: código de lluvia sin precipitación real -> categoría nublado, no lluvia', () => {
+  const daily = {
+    time: ['2026-08-19'],
+    temperature_2m_max: [25],
+    temperature_2m_min: [15],
+    weather_code: [55], // llovizna densa
+    precipitation_sum: [0], // pero sin lluvia real ese día (caso real visto en producción)
+  };
+  const dias = seleccionarDias(daily);
+  assert.equal(dias[0].categoria, 'nublado');
 });
 
 console.log('\n--- trazadoTemperatura ---');

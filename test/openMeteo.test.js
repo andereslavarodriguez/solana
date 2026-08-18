@@ -7,7 +7,7 @@
 // de tormenta.
 
 import assert from 'node:assert/strict';
-import { categoriaTiempo, esTormenta } from '../src/data/openMeteo.js';
+import { categoriaTiempo, categoriaTiempoDia, esTormenta } from '../src/data/openMeteo.js';
 
 let ok = 0;
 function caso(nombre, fn) {
@@ -54,6 +54,39 @@ caso('95/96/99 (tormenta) -> tormenta, coincide con esTormenta()', () => {
 
 caso('código no reconocido -> nublado (fallback conservador)', () => {
   assert.equal(categoriaTiempo(999), 'nublado');
+});
+
+console.log('\n--- categoriaTiempoDia ---');
+
+caso('código de lluvia con precipitación real -> lluvia (caso normal, sin cambios)', () => {
+  assert.equal(categoriaTiempoDia(61, 3.2), 'lluvia');
+});
+
+caso('bug real reportado: código de llovizna (55) con 0.0mm real -> nublado, no lluvia', () => {
+  // Reproduce exactamente el caso visto en producción (Open-Meteo,
+  // Pamplona): weather_code=55 "llovizna densa" con precipitation_sum=0.0
+  // el mismo día — el código es "el más severo del día", no implica que
+  // de verdad haya llovido.
+  assert.equal(categoriaTiempoDia(55, 0.0), 'nublado');
+});
+
+caso('precipitación justo por debajo del umbral (0.2mm) -> se sigue tratando como no-lluvia', () => {
+  assert.equal(categoriaTiempoDia(61, 0.1), 'nublado');
+});
+
+caso('precipitación en el umbral o por encima -> se respeta el código', () => {
+  assert.equal(categoriaTiempoDia(61, 0.2), 'lluvia');
+});
+
+caso('código de nieve/tormenta sin precipitación real -> también se corrige a nublado', () => {
+  assert.equal(categoriaTiempoDia(71, 0), 'nublado');
+  assert.equal(categoriaTiempoDia(95, 0), 'nublado');
+});
+
+caso('categorías sin precipitación (despejado/parcial/nublado) no se tocan aunque venga 0mm', () => {
+  assert.equal(categoriaTiempoDia(0, 0), 'despejado');
+  assert.equal(categoriaTiempoDia(2, 0), 'parcial');
+  assert.equal(categoriaTiempoDia(3, 0), 'nublado');
 });
 
 console.log(`\n${ok} casos OK (openMeteo.test.js)\n`);

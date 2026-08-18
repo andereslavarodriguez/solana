@@ -1,11 +1,9 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-18 (tres arreglos sobre el pronóstico
-extendido de "Tiempo": el primer punto de horas ahora es la próxima
-marca real de 3h en vez de "ahora+3h"; condiciones actuales en grande
-encima de la línea de temperatura; y los 7 días son seleccionables,
-actualizando la fila de horas al día elegido — ver "Marcador de 3h real,
-condiciones actuales y selector de día" al final del documento)
+Última actualización: 2026-08-18 (bug real corregido: días marcados con
+icono de lluvia sin lluvia real, corroborado ahora con la precipitación
+acumulada del día; sol más grande en el icono "parcialmente nublado" —
+ver "Icono de lluvia falso y sol más grande" al final del documento)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4349,3 +4347,76 @@ fila de horas de arriba se actualice a ese día, con el seleccionado
    `getComputedStyle` que el color de fondo del día activo coincide con
    `--acento-fondo`. Sin errores de consola en ningún caso. Script
    ad-hoc, no committeado.
+
+### Icono de lluvia falso y sol más grande (2026-08-18, misma tarde)
+
+Dos pedidos explícitos más, y una pregunta: "hay días en los que el
+icono es de lluvia pero luego no llueve"; "el icono de sol con nubes haz
+el sol más grande"; y si es normal que el jueves salieran máximas de 32°
+en la app cuando Google mostraba 25°.
+
+1. **Bug real confirmado con una petición directa a Open-Meteo antes de
+   tocar nada: `daily.weather_code` (el código "más severo del día") puede
+   marcar un código de llovizna/lluvia con `precipitation_sum` en 0.0mm
+   el mismo día.** Visto en producción: código 55 ("llovizna densa") con
+   0.0mm reales el mismo día — el dato de categoría y el dato de cantidad
+   de lluvia, ambos reales, se contradicen entre sí, y el icono solo
+   miraba el primero. `categoriaTiempoDia(codigoTiempo,
+   precipitacionSumMm)`, función nueva en `src/data/openMeteo.js` (junto
+   a `categoriaTiempo`/`esTormenta`, mismo criterio de "interpretación
+   del dato de la API" ya establecido) — corrobora las categorías que
+   implican precipitación (lluvia/nieve/tormenta) con la cantidad
+   acumulada real; por debajo de `UMBRAL_PRECIPITACION_ICONO_MM = 0.2`,
+   se muestra como "nublado" en vez de una lluvia/nieve/tormenta que el
+   propio dato de cantidad desmiente. Solo afecta a la fila de 7 DÍAS
+   (`seleccionarDias`, que ya tenía el dato de precipitación disponible
+   tras pedirlo) — la fila de horas sigue usando `categoriaTiempo` a
+   secas: cada hora tiene su propio código real para ese instante
+   concreto, sin el mismo problema de "resumen del día entero" que solo
+   existe en el dato diario. `obtenerPronosticoExtendido` pide ahora
+   también `precipitation_sum` en `daily` (no se pedía antes, hacía
+   falta para esta corroboración).
+
+2. **Sol más grande en `iconoNubeSol` — pedido explícito, se leía como
+   una mota diminuta junto a la nube.** Radio del disco de 2.1 a 3.1 (un
+   ~50% más grande), con los rayos reescalados a juego. Verificado
+   aislando ambas versiones en una página mínima aparte (no en la app en
+   vivo: con el clima real de Pamplona en el momento de verificar no
+   había ningún día/hora en categoría "parcial" con el que comparar
+   dentro de la propia interfaz) — confirmado en captura que el sol
+   nuevo se lee con mucha más presencia que el original, sin salirse del
+   hueco libre que deja la nube. `iconoNubeLuna` (la misma composición
+   pero de noche) no se tocó — no fue lo que se pidió, y una luna
+   pequeña se lee bien a su tamaño actual sin necesitar el mismo ajuste
+   que un sol con rayos.
+
+3. **La pregunta del jueves: no es un bug de la app — verificado
+   comparando el número mostrado contra la respuesta cruda de Open-Meteo
+   antes de responder.** Una petición directa a la API para ese día
+   devolvió `temperature_2m_max: 31.7`, que es exactamente lo que la app
+   redondea a "32°" — no hay ningún desfase de índice/día ni error de
+   zona horaria en cómo se procesa. La discrepancia con Google (25°) es
+   real pero ajena al código: cada proveedor agrega modelos
+   meteorológicos distintos (Open-Meteo mezcla varios modelos numéricos
+   reales; Google no necesariamente los mismos), y ese jueves concreto
+   cae justo en una transición de temperatura fuerte según el propio
+   Open-Meteo (32° jueves -> 23° viernes, una caída de 8-9° de un día
+   para otro) — en una transición así, una pequeña diferencia entre
+   modelos sobre CUÁNDO llega el cambio de tiempo (unas horas antes o
+   después) puede traducirse en varios grados de diferencia en la
+   máxima prevista para ese día concreto. Es una limitación conocida de
+   cualquier previsión a varios días vista, no algo que la app deba (o
+   pueda) corregir: se le explicó esto al usuario en vez de tratarlo
+   como una tarea de código.
+
+4. **Verificación:** 7 casos de prueba nuevos (6 en
+   `test/openMeteo.test.js` para `categoriaTiempoDia`, incluido el caso
+   exacto reportado; 1 en `test/pronosticoExtendido.test.js` para
+   `seleccionarDias` con el mismo caso real de extremo a extremo), 171 en
+   total en `npm test`, sin romper ningún test ya existente.
+   `npm run build` sin errores. Visual con Playwright y clima real de
+   Pamplona: un día que antes mostraba icono de lluvia con 0.0mm real
+   ("Mié") pasa a mostrar nube sin gotas, con el resto de días con
+   lluvia real de verdad sin cambios; icono de sol grande verificado por
+   separado (ver punto 2). Sin errores de consola en ningún caso.
+   Scripts ad-hoc, no committeados.

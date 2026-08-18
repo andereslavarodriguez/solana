@@ -155,12 +155,14 @@ export function iconoSol() {
 }
 
 // Sol asomando por detrás de la nube — mismo trazo de nube que iconoLluvia/
-// iconoNube, con un sol pequeño en la esquina libre superior-izquierda (el
-// hueco que deja esa forma de nube antes de que empiece su arco).
+// iconoNube, con un sol en la esquina libre superior-izquierda (el hueco
+// que deja esa forma de nube antes de que empiece su arco). Sol más
+// grande que la primera versión (r 2.1->3.1) — pedido explícito, se leía
+// como una mota diminuta junto a la nube en vez de un sol de verdad.
 export function iconoNubeSol() {
   return base(`
-    <circle cx="5.2" cy="6" r="2.1" fill="currentColor" stroke="none"/>
-    <path d="M5.2 2.3v1.1M1.7 6h1.1M2.9 3l.9.9M2.9 9l.9-.9" stroke-width="1.4"/>
+    <circle cx="5.6" cy="5.7" r="3.1" fill="currentColor" stroke="none"/>
+    <path d="M5.6 0.9v1.4M0.5 5.7h1.4M1.6 1.8l1.1 1.1M1.6 9.6l1.1-1.1" stroke-width="1.6"/>
     <path d="M7 13a4 4 0 0 1 .9-7.9A5.5 5.5 0 0 1 18.5 8.5 3.5 3.5 0 0 1 18 15H7Z"/>
   `);
 }
