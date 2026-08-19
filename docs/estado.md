@@ -1,8 +1,10 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-19 (el hueco que quedaba sobre la puerta
-hasta el techo ya tiene pared — ver "Corrección: hueco sobre la puerta
-hasta el techo" al final del documento. Justo antes, las puertas del
+Última actualización: 2026-08-19 (pino grande y alto detrás de la casa
+en la isla — ver "Pino grande detrás de la casa" al final del documento.
+Justo antes, el hueco que quedaba sobre la puerta hasta el techo ya tiene
+pared — ver "Corrección: hueco sobre la puerta hasta el techo". Antes de
+eso, las puertas del
 plano ganaron forma 3D — antes eran un hueco vacío en la malla — y las
 paredes distinguen fachada exterior, con tablas de madera, de tabique
 interior, liso — ver "Puertas con forma 3D, fachada exterior de madera /
@@ -5135,3 +5137,53 @@ sin que sobresalga en habitaciones pequeñas — más parecido a diseñar desde
 cero un `construirFarola`/`construirBuzon` nuevo (que ya costaron varias
 rondas cada uno, ver Fase 6) que a una línea de código. Pendiente de que
 el usuario decida si quiere ese trabajo — no implementado en esta sesión.
+
+### Pino grande detrás de la casa (2026-08-19)
+
+Pedido explícito: "pon un pino muy grande y alto en la isla en la parte
+de detras de la casa".
+
+1. **`construirPino`, función nueva en `escena.js` — tronco + 5 niveles de
+   `THREE.ConeGeometry` apilados (silueta cónica clásica), no el racimo
+   de esferas de `construirArbol`.** Un pino no se lee como una bola de
+   fronda — se generalizó `NIVELES_PINO` (posición vertical y radio
+   relativos, de la base a la punta) en vez de tres conos con medidas
+   sueltas, para poder ajustar la silueta sin recalcular cada pieza a
+   mano. `alturaPino = geo.altura * 4.2` — bastante más que
+   `construirArbol` (tronco `geo.altura*0.85` + copa de radio ~0.8),
+   pedido explícito de "muy grande y alto": sobresale con claridad por
+   encima del tejado en las cuatro combinaciones landscape/retrato ×
+   día/noche verificadas.
+
+2. **Posición: `-dirCamaraXZ` (dirección CONTRARIA a la cámara), a
+   propósito lo opuesto de `construirArbol`.** El árbol normal se movió
+   AL LADO de la cámara en el checkpoint 8 precisamente porque "detrás"
+   quedaba escondido tras la habitación — aquí "detrás" es justo lo
+   pedido, y al ser mucho más alto que el árbol normal no se esconde:
+   sobresale por encima del tejado aunque el tronco quede parcialmente
+   tapado por la casa en primer plano. Mismo cálculo de distancia segura
+   que `construirArbol`/las toperas (mitad de la DIAGONAL de la caja
+   englobante de la habitación, `Math.hypot(anchoLateral, profundidad)/2`
+   — no la mitad de un solo lado, que fue un bug real en checkpoints
+   anteriores cuando el objeto se coloca a lo largo de un eje que no es
+   el de la propia habitación), capada a `radioIsla*0.85` para no salirse
+   de la isla.
+
+3. **Verificación visual con capturas reales (mediodía, atardecer,
+   retrato de móvil, y contra `casa.html` con datos reales) — sin
+   cambios en `npm test`/`npm run build` (cambio íntegro de la capa
+   impura `escena3d/escena.js`, sin tests puros propios, mismo criterio
+   que el resto del árbol/farola/buzón/isla).** Encontrado por el camino,
+   investigado a fondo antes de descartarlo como ajeno a este cambio: con
+   el cielo real 100% nublado de esta noche, las nubes (más opacas desde
+   el checkpoint "Nubes: menos oscurecimiento, sombras más difusas") se
+   agrupan en la misma zona del cielo (`ANCLAS_NUBE`, arriba-izquierda)
+   donde también vive la luna, formando un blob blanco grande que puede
+   solapar la copa del pino — confirmado con `radio`/`geo.altura`
+   idénticos entre la página de depuración y `casa.html` (instrumentado
+   temporalmente, revertido) que NO es un bug introducido por el pino ni
+   por su posición: el mismo blob aparece igual de grande con
+   `debugNubes=100` en la página de depuración aislada, sin ningún pino
+   de por medio. Es una condición meteorológica real (muy nublado)
+   coincidiendo con la zona de cielo ya usada por la luna — no se ha
+   tocado el sistema de nubes/luna, fuera de alcance de "poner un pino".

@@ -2155,6 +2155,76 @@ function construirArbol(geo, radioIsla, dirCamaraXZ, nocturnidadActual, nubesPct
   return grupo;
 }
 
+// Pino grande y alto detrás de la casa (2026-08-19, pedido explícito: "pon
+// un pino muy grande y alto en la isla en la parte de detras de la casa").
+// A diferencia de construirArbol (que se movió AL LADO de la cámara en el
+// checkpoint 8, precisamente porque "detrás" quedaba escondido tras la
+// habitación) — aquí "detrás" es justo lo pedido: un pino mucho más alto
+// que el árbol normal, que sobresale bien por encima del tejado y se
+// recorta contra el cielo desde la cámara fija aunque quede parcialmente
+// tapado por la casa en primer plano. Tronco + niveles de copa apilados
+// (THREE.ConeGeometry, silueta cónica clásica de pino), no el racimo de
+// esferas de construirArbol — un pino no se lee como una bola de fronda.
+const COLOR_TRONCO_PINO = 0x6b4a30;
+const COLOR_COPA_PINO = 0x2f5c33;
+// Posición vertical (fracción de la altura de la copa) y radio relativo
+// de cada nivel, de abajo a arriba — más ancho en la base, más estrecho
+// en la punta.
+const NIVELES_PINO = [
+  { y: 0.0, radio: 1.0 },
+  { y: 0.22, radio: 0.8 },
+  { y: 0.44, radio: 0.62 },
+  { y: 0.64, radio: 0.44 },
+  { y: 0.82, radio: 0.24 },
+];
+function construirPino(geo, radioIsla, dirCamaraXZ) {
+  const grupo = new THREE.Group();
+
+  // "Muy grande y alto" — bastante más que construirArbol (tronco
+  // geo.altura*0.85 + copa de ~1.4 de radio), para que sobresalga con
+  // claridad por encima del tejado visto desde la cámara.
+  const alturaPino = geo.altura * 4.2;
+  const alturaTronco = alturaPino * 0.32;
+  const alturaCopa = alturaPino - alturaTronco;
+  const radioCopaBase = alturaPino * 0.16;
+  const radioTronco = alturaPino * 0.02;
+
+  const tronco = new THREE.Mesh(
+    new THREE.CylinderGeometry(radioTronco * 0.6, radioTronco, alturaTronco, 8),
+    new THREE.MeshStandardMaterial({ color: COLOR_TRONCO_PINO, roughness: 0.9 }),
+  );
+  tronco.position.y = alturaTronco / 2;
+  tronco.castShadow = true;
+  grupo.add(tronco);
+
+  const materialCopa = new THREE.MeshStandardMaterial({ color: COLOR_COPA_PINO, roughness: 0.95 });
+  const alturaNivel = alturaCopa * 0.32; // cada cono es más alto que el hueco hasta el siguiente, para que se solapen sin dejar huecos
+  NIVELES_PINO.forEach(({ y, radio }, i) => {
+    const esUltimo = i === NIVELES_PINO.length - 1;
+    const alturaCono = esUltimo ? alturaCopa * (1 - y) * 1.15 : alturaNivel * 1.7;
+    const baseY = alturaTronco + alturaCopa * y;
+    const cono = new THREE.Mesh(new THREE.ConeGeometry(radioCopaBase * radio, alturaCono, 9), materialCopa);
+    cono.position.y = baseY + alturaCono / 2;
+    cono.castShadow = true;
+    grupo.add(cono);
+  });
+
+  // Detrás de la casa: dirección CONTRARIA a la cámara (-dirCamaraXZ), el
+  // lado que la cámara isométrica fija no ve de frente. Misma lección que
+  // ya costó un bug real en el árbol/las toperas (checkpoints 9/13): para
+  // salir fuera de la huella real de la casa hace falta compararse con la
+  // mitad de la DIAGONAL de la caja englobante (Math.hypot), no con la
+  // mitad de un solo lado — `-dirCamaraXZ` no coincide con los ejes reales
+  // de la habitación salvo que la casa esté alineada con la cámara.
+  const distancia = Math.min(
+    Math.hypot(geo.anchoLateral, geo.profundidad) / 2 + radioCopaBase + 0.6,
+    radioIsla * 0.85,
+  );
+  grupo.position.set(-dirCamaraXZ.x * distancia, 0, -dirCamaraXZ.z * distancia);
+
+  return grupo;
+}
+
 // Buzón simple junto a la casa (checkpoint 8, pedido explícito: "un palo
 // en el suelo, una caja de metal con una pieza roja en forma de L").
 // Cuatro piezas, todo THREE.BoxGeometry salvo el poste — nada de textura
@@ -2974,6 +3044,7 @@ export function crearEscena3D(contenedor, plano, alturaTecho, sol, clima = {}, l
   const radioIsla = radioHabitacion * 1.4;
   scene.add(construirIsla(radioIsla, radioHabitacion, nocturnidadActual, geo));
   scene.add(construirArbol(geo, radioIsla, dirCamaraXZ, nocturnidadActual, sol.nubesPct));
+  scene.add(construirPino(geo, radioIsla, dirCamaraXZ));
   scene.add(construirBuzon(geo));
   scene.add(construirFarola(geo, dirCamaraXZ, nocturnidadActual, sol.nubesPct));
   const radio = calcularRadioEscena(scene, objetivo);
