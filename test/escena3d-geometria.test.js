@@ -228,20 +228,21 @@ const planoPuerta = {
 };
 const geoPuerta = calcularGeometria(planoPuerta, 2.5);
 
-caso('un tramo de clase "puerta" SÍ genera su propia pared (hoja de madera), no un hueco vacío', () => {
+caso('un tramo de clase "puerta" genera DOS paredes (la hoja + el dintel hasta el techo), no un hueco vacío', () => {
   // Comparación robusta, sin calcular coordenadas de mundo a mano: el
   // MISMO plano pero con ese segmento como 'muro' en vez de 'puerta' fusiona
   // todo el tabique interior en un único tramo continuo (mismo
-  // tipo/exterior/faceta a lo largo de las 4 celdas) — dos paredes menos
-  // que con la puerta, que rompe esa continuidad en tres tramos (muro,
-  // puerta, muro) y desde este cambio los tres producen geometría propia,
-  // no solo los dos de muro como antes.
+  // tipo/exterior/faceta a lo largo de las 4 celdas) — un único tramo, frente
+  // a los tres que deja la puerta al romper esa continuidad (muro, puerta,
+  // muro), y desde este cambio el tramo 'puerta' aporta DOS paredes (la
+  // hoja + el dintel que rellena el hueco hasta el techo, bug real
+  // reportado: "encima de las puertas... debería haber pared"), no una.
   const planoSinPuerta = JSON.parse(JSON.stringify(planoPuerta));
   const segPuerta = planoSinPuerta.segmentos.find((s) => s.clase === 'puerta');
   segPuerta.clase = 'muro';
   const geoSinPuerta = calcularGeometria(planoSinPuerta, 2.5);
 
-  assert.equal(geoSinPuerta.paredes.length, geoPuerta.paredes.length - 2);
+  assert.equal(geoSinPuerta.paredes.length, geoPuerta.paredes.length - 3);
 });
 
 caso('la puerta es más baja que el resto de la pared (no llega hasta el techo) y apoya en el suelo', () => {
@@ -250,6 +251,21 @@ caso('la puerta es más baja que el resto de la pared (no llega hasta el techo) 
   assert.ok(puerta.alto < geoPuerta.altura);
   assert.ok(cerca(puerta.centro.y, puerta.alto / 2)); // apoyada en el suelo, no centrada en la altura de la pared
   assert.ok(cerca(puerta.centro.y - puerta.alto / 2, 0)); // el borde inferior toca el suelo
+});
+
+caso('el dintel encima de la puerta rellena EXACTAMENTE el hueco hasta el techo, sin solape ni resquicio', () => {
+  const puerta = geoPuerta.paredes.find((p) => p.puerta);
+  // Identificado por posición (mismo centro X/Z que la puerta, misma
+  // pared), no solo por ancho — varios tramos del perímetro de este plano
+  // de prueba comparten el mismo ancho de 1 celda que la puerta, así que
+  // comparar solo `ancho` podía enganchar el tramo equivocado.
+  const dintel = geoPuerta.paredes.find(
+    (p) => !p.puerta && !p.cristal && cerca(p.centro.x, puerta.centro.x) && cerca(p.centro.z, puerta.centro.z),
+  );
+  assert.ok(dintel, 'debería haber una pared (el dintel) en la misma posición que la puerta');
+  assert.ok(cerca(dintel.centro.y - dintel.alto / 2, puerta.alto)); // arranca justo donde acaba la puerta
+  assert.ok(cerca(dintel.centro.y + dintel.alto / 2, geoPuerta.altura)); // llega exactamente hasta el techo
+  assert.equal(dintel.exterior, puerta.exterior); // misma fachada — madera fuera / lisa dentro, igual que el resto de esa pared
 });
 
 console.log('\n--- calcularGeometria (escala con más/menos superficie real) ---');

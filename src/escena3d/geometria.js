@@ -63,6 +63,15 @@ function perpendicular({ x, z }) {
 // propia), ahora producen su propio objeto `puerta:true`, con menos altura
 // que el resto de la pared (no llega hasta el techo) y apoyado en el
 // suelo, no centrado verticalmente como una pared/ventana normal.
+//
+// Un tramo 'puerta' produce DOS objetos, no uno — la propia hoja de
+// madera, más una pared normal encima que rellena el hueco hasta el
+// techo (bug real reportado tras el primer despliegue: "encima de las
+// puertas, en el hueco que hay hasta el techo... debería haber pared" —
+// el techo es invisible, así que ese hueco se veía literalmente como un
+// agujero al cielo). Por eso esta función devuelve siempre un ARRAY (un
+// solo elemento para muro/ventana, dos para puerta) — `calcularGeometria`
+// aplana el resultado con `flatMap`.
 const FRACCION_ALTURA_PUERTA = 0.82; // ~2m de puerta con una casa de 2.5m de techo — no llega al techo, pedido explícito
 
 function construirParedDesdeTramo(tramo, punto, altura, ejeProfundidad, ejeLateral) {
@@ -93,7 +102,7 @@ function construirParedDesdeTramo(tramo, punto, altura, ejeProfundidad, ejeLater
 
   if (tramo.clase === 'puerta') {
     const altoPuerta = altura * FRACCION_ALTURA_PUERTA;
-    return {
+    const puerta = {
       centro: { x: centroX, y: altoPuerta / 2, z: centroZ },
       normal,
       ancho,
@@ -101,12 +110,22 @@ function construirParedDesdeTramo(tramo, punto, altura, ejeProfundidad, ejeLater
       exterior: tramo.exterior,
       puerta: true,
     };
+    const altoHueco = altura - altoPuerta;
+    const dintel = {
+      centro: { x: centroX, y: altoPuerta + altoHueco / 2, z: centroZ },
+      normal,
+      ancho,
+      alto: altoHueco,
+      exterior: tramo.exterior,
+      cristal: false,
+    };
+    return [puerta, dintel];
   }
 
   const centro = { x: centroX, y: altura / 2, z: centroZ };
   const base = { centro, normal, ancho, alto: altura, exterior: tramo.exterior };
-  if (tramo.clase !== 'ventana') return { ...base, cristal: false };
-  return { ...base, cristal: true, anchoVentana: ancho };
+  if (tramo.clase !== 'ventana') return [{ ...base, cristal: false }];
+  return [{ ...base, cristal: true, anchoVentana: ancho }];
 }
 
 export function calcularGeometria(plano, alturaTecho) {
@@ -170,7 +189,9 @@ export function calcularGeometria(plano, alturaTecho) {
   const anchoLateral = (maxCol - minCol + 1) * unidad;
   const profundidad = (maxFila - minFila + 1) * unidad;
 
-  const paredes = fusionarEnTramos(plano).map((t) => construirParedDesdeTramo(t, punto, altura, ejeProfundidad, ejeLateral));
+  const paredes = fusionarEnTramos(plano).flatMap((t) =>
+    construirParedDesdeTramo(t, punto, altura, ejeProfundidad, ejeLateral),
+  );
 
   // Suelo/techo: un quad por celda interior, no un único rectángulo — la
   // huella ya no es necesariamente un rectángulo simple. Cada quad

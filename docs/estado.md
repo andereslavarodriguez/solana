@@ -1,10 +1,12 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-19 (las puertas del plano ya tienen forma
-3D — antes eran un hueco vacío en la malla — y las paredes distinguen
-fachada exterior, con tablas de madera, de tabique interior, liso — ver
-"Puertas con forma 3D, fachada exterior de madera / interior lisa" al
-final del documento. Antes de eso, "el espejo real de la casa dibujada
+Última actualización: 2026-08-19 (el hueco que quedaba sobre la puerta
+hasta el techo ya tiene pared — ver "Corrección: hueco sobre la puerta
+hasta el techo" al final del documento. Justo antes, las puertas del
+plano ganaron forma 3D — antes eran un hueco vacío en la malla — y las
+paredes distinguen fachada exterior, con tablas de madera, de tabique
+interior, liso — ver "Puertas con forma 3D, fachada exterior de madera /
+interior lisa". Antes de eso, "el espejo real de la casa dibujada
 estaba en la fórmula de coordenadas de geometria.js, no en las etiquetas
 izquierda/derecha como se pensó primero — ver "El espejo de verdad: la
 fórmula de coordenadas, no las etiquetas". Justo antes, tres correcciones
@@ -5071,3 +5073,65 @@ demasiado dejalo sin muebles."
    el piso migrado por defecto del usuario real (rectangular, sin
    puertas) se sigue viendo bien, de día y de noche, en landscape y en
    retrato de móvil — sin errores de consola en ningún caso.
+
+### Corrección: hueco sobre la puerta hasta el techo (2026-08-19, misma tarde)
+
+Bug real reportado nada más ver el checkpoint anterior en vivo: "encima de
+las puertas, en el hueco que hay hasta el techo (que es invisible) debería
+haber pared". Causa: `FRACCION_ALTURA_PUERTA` (0.82) hace que la hoja de la
+puerta ya no llegue al techo real (`altura`), pero `construirParedDesdeTramo`
+solo devolvía ESE objeto para un tramo `'puerta'` — el hueco entre el marco
+de la puerta y el techo (invisible, pero que sí proyecta sombra y sí forma
+parte de la envolvente real de la casa) se quedaba sin ninguna geometría,
+así que se veía literalmente como un agujero abierto al cielo.
+
+1. **`construirParedDesdeTramo` pasa a devolver SIEMPRE un array — un solo
+   elemento para muro/ventana, dos para puerta (la hoja + un "dintel": una
+   pared normal, opaca, que rellena justo el hueco entre `altoPuerta` y
+   `altura`).** El dintel reutiliza tal cual el mismo `normal`/`ancho` que
+   la puerta y hereda su `exterior` — no es un tipo de objeto nuevo, es
+   exactamente el mismo objeto `{centro, normal, ancho, alto, exterior,
+   cristal:false}` que ya produce cualquier tramo `'muro'`, así que
+   `escena.js` no necesitó ningún cambio: `construirParedOpaca`/
+   `construirCajaMuro` (checkpoint anterior, mismo día) ya sabían pintarlo
+   con madera fuera / crema dentro sin tocar una sola línea de ese fichero.
+   `calcularGeometria` cambia de `.map()` a `.flatMap()` sobre
+   `fusionarEnTramos(plano)` para aplanar el resultado.
+
+2. **Verificación:** el caso de test ya existente sobre cuántas paredes
+   genera un tramo `'puerta'` se actualizó (antes esperaba 1, ahora 2 — la
+   comparación "con puerta" vs. "con muro" pasa de una diferencia de 2 a
+   una de 3 paredes) y se añadió un caso nuevo que comprueba explícitamente
+   que el dintel arranca justo donde acaba la puerta
+   (`dintel.centro.y - dintel.alto/2 ≈ puerta.alto`) y llega exactamente
+   hasta el techo (`dintel.centro.y + dintel.alto/2 ≈ altura`), sin solape
+   ni resquicio — identificado por POSICIÓN (mismo centro X/Z que la
+   puerta), no por ancho: varios tramos del perímetro del plano de prueba
+   comparten el mismo ancho de 1 celda que la puerta, así que comparar solo
+   `ancho` enganchaba el tramo equivocado la primera vez que se escribió
+   este test. 22 casos OK en `escena3d-geometria.test.js` (antes 21), 192
+   en total en `npm test`. `npm run build` sin errores. Visual con el mismo
+   script ad-hoc de la sesión anterior (plano con puerta exterior +
+   interior): confirmado que el hueco sobre las dos puertas ya no se ve —
+   la pared sigue hasta el techo, con la misma textura (madera fuera,
+   crema dentro) que el resto de esa pared — y que el piso migrado por
+   defecto del usuario real (sin puertas) sigue sin cambios.
+
+### Sobre muebles (cama, sofá): opinión dada, no implementado
+
+El usuario preguntó qué opinión merece añadir muebles como una cama o un
+sofá, retomando el "como extra" del pedido original de esta misma sesión
+(ya descartado entonces por falta de segmentación de habitaciones). Se
+reconoció ante el usuario que la valoración original fue demasiado
+pesimista en un punto — separar el interior en habitaciones individuales
+SÍ es relativamente barato (reutilizar `celdasInteriores`/`segMap` de
+`plano.js` con un flood fill que arranque en una celda interior cualquiera
+y trate cualquier segmento, incluida una puerta, como frontera — muy
+parecido a lo que ya hace `celdasInteriores` para distinguir dentro/fuera).
+Lo que sigue siendo trabajo real y no trivial es la propia COLOCACIÓN:
+elegir una pared del contorno de esa habitación lo bastante larga y sin
+ventana/puerta de por medio, orientar el mueble contra ella, dimensionarlo
+sin que sobresalga en habitaciones pequeñas — más parecido a diseñar desde
+cero un `construirFarola`/`construirBuzon` nuevo (que ya costaron varias
+rondas cada uno, ver Fase 6) que a una línea de código. Pendiente de que
+el usuario decida si quiere ese trabajo — no implementado en esta sesión.
