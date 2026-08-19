@@ -1,10 +1,13 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-19 (pino grande y alto detrás de la casa
-en la isla — ver "Pino grande detrás de la casa" al final del documento.
-Justo antes, el hueco que quedaba sobre la puerta hasta el techo ya tiene
-pared — ver "Corrección: hueco sobre la puerta hasta el techo". Antes de
-eso, las puertas del
+Última actualización: 2026-08-19 (el pino de la isla perdió la punta
+afilada y el buzón se movió a la esquina de la casa más cercana a la
+cámara — ver "Pino menos puntiagudo y buzón en la esquina cercana a la
+cámara" al final del documento. Justo antes, el pino grande y alto
+detrás de la casa — ver "Pino grande detrás de la casa". Antes de eso,
+el hueco que quedaba sobre la puerta hasta el techo ya tiene pared — ver
+"Corrección: hueco sobre la puerta hasta el techo". Antes de eso, las
+puertas del
 plano ganaron forma 3D — antes eran un hueco vacío en la malla — y las
 paredes distinguen fachada exterior, con tablas de madera, de tabique
 interior, liso — ver "Puertas con forma 3D, fachada exterior de madera /
@@ -5187,3 +5190,58 @@ de detras de la casa".
    de por medio. Es una condición meteorológica real (muy nublado)
    coincidiendo con la zona de cielo ya usada por la luna — no se ha
    tocado el sistema de nubes/luna, fuera de alcance de "poner un pino".
+
+### Pino menos puntiagudo y buzón en la esquina cercana a la cámara (2026-08-19)
+
+Dos pedidos explícitos tras ver el pino en vivo: "el pino es demasiado
+puntiagudo. mueve el buzon a la esquina de la casa mas cercana a la
+camara".
+
+1. **Buzón: la esquina se elige ahora por proyección sobre `dirCamaraXZ`
+   (mayor producto escalar = más cerca de la cámara), no un índice fijo
+   (`geo.esquinasCaja[0]`, sin relación con la cámara desde el
+   checkpoint 8-9).** `dirCamaraXZ` apunta desde el centro de la escena
+   HACIA la cámara (misma definición que ya usa `signoHaciaCamara` para
+   los reflejos del cristal) — la esquina con mayor proyección sobre ese
+   vector es la más adelantada hacia la cámara. `construirBuzon` gana un
+   segundo parámetro (`dirCamaraXZ`), pasado desde `crearEscena3D` igual
+   que ya recibían `construirArbol`/`construirFarola`/`construirPino`.
+
+2. **Pino: dos rondas hasta quitar la punta afilada de verdad — la
+   primera ronda (ensanchar los radios de `NIVELES_PINO`) no bastó por sí
+   sola, y un segundo intento (rematar con una esfera en vez de un cono)
+   tuvo un bug real que lo dejó MÁS puntiagudo, no menos, antes del
+   arreglo final.**
+   - Primer intento: solo ensanchar los radios de cada nivel (menos
+     ahusado en el cuerpo) — el nivel superior seguía siendo un
+     `THREE.ConeGeometry` normal, y CUALQUIER cono, por corto o ancho que
+     sea, termina en un vértice matemático perfecto — la silueta seguía
+     leyéndose como una aguja en la punta.
+   - Segundo intento: sustituir el último nivel cónico por un remate
+     esférico (una esfera no tiene ningún vértice, así que no puede
+     terminar en punta) — pero al simplificar el bucle se le dio a TODOS
+     los niveles la misma altura de cono (`alturaNivel*1.7`), incluido el
+     que antes tenía una altura reducida a propósito. Como el último nivel
+     arranca ya muy arriba (`y=0.82` de la copa) y esa altura estándar es
+     bastante mayor que el hueco real que queda hasta la copa, el cono se
+     disparaba muy por encima del límite nominal (ápice en 1.36× la altura
+     de copa) — confirmado en captura: el pino salió MÁS puntiagudo que en
+     el primer intento, no menos, porque ahora había un cono alto y
+     estrecho sobresaliendo por encima de toda la silueta ensanchada.
+   - Arreglo real: el ÚLTIMO nivel vuelve a tener una altura de cono
+     propia y reducida (`alturaCopa*(1-y)*0.95`, el hueco real que queda
+     hasta la copa, no `alturaNivel*1.7` como el resto) para que su ápice
+     quede cerca del límite superior de la copa, y el remate esférico se
+     hunde parcialmente en ese ápice (`apiceConoY - radioRemate*0.5`) para
+     redondearlo del todo. Verificado en captura con viewport alto
+     (1280×1600, para que quepa el pino entero sin recortar) que la punta
+     ya no tiene ningún vértice agudo visible, en landscape, retrato de
+     móvil y contra `casa.html` con datos reales.
+
+3. **Verificación:** `npm test`/`npm run build` sin cambios de resultado
+   (cambio íntegro de la capa impura `escena3d/escena.js`, sin tests
+   puros propios, mismo criterio que el resto del árbol/farola/buzón/
+   pino). Visual con capturas reales (mediodía, atardecer, retrato de
+   móvil, y `casa.html` con datos reales) — el buzón queda claramente en
+   la esquina delantera de la casa (la más cercana a la cámara) en las
+   cuatro, y la copa del pino se ve redondeada en vez de acabar en punta.

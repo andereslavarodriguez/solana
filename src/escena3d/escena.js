@@ -2169,13 +2169,18 @@ const COLOR_TRONCO_PINO = 0x6b4a30;
 const COLOR_COPA_PINO = 0x2f5c33;
 // Posición vertical (fracción de la altura de la copa) y radio relativo
 // de cada nivel, de abajo a arriba — más ancho en la base, más estrecho
-// en la punta.
+// hacia arriba. Pedido explícito tras ver el primer resultado ("el pino
+// es demasiado puntiagudo"): radios más altos en cada nivel (menos
+// ahusado). Solo 4 niveles, todos cono — el remate ya no es un 5º nivel
+// cónico (ver más abajo: una esfera achatada, nunca un cono, porque
+// CUALQUIER cono por corto que sea sigue terminando en un vértice
+// matemático perfecto, y eso es justo lo que se leía como "puntiagudo"
+// por mucho que se abriera el ángulo).
 const NIVELES_PINO = [
   { y: 0.0, radio: 1.0 },
-  { y: 0.22, radio: 0.8 },
-  { y: 0.44, radio: 0.62 },
-  { y: 0.64, radio: 0.44 },
-  { y: 0.82, radio: 0.24 },
+  { y: 0.3, radio: 0.84 },
+  { y: 0.58, radio: 0.66 },
+  { y: 0.82, radio: 0.48 },
 ];
 function construirPino(geo, radioIsla, dirCamaraXZ) {
   const grupo = new THREE.Group();
@@ -2199,15 +2204,34 @@ function construirPino(geo, radioIsla, dirCamaraXZ) {
 
   const materialCopa = new THREE.MeshStandardMaterial({ color: COLOR_COPA_PINO, roughness: 0.95 });
   const alturaNivel = alturaCopa * 0.32; // cada cono es más alto que el hueco hasta el siguiente, para que se solapen sin dejar huecos
+  let apiceConoY = 0;
   NIVELES_PINO.forEach(({ y, radio }, i) => {
     const esUltimo = i === NIVELES_PINO.length - 1;
-    const alturaCono = esUltimo ? alturaCopa * (1 - y) * 1.15 : alturaNivel * 1.7;
+    // Bug real (encontrado en captura): dar a TODOS los niveles la misma
+    // altura (alturaNivel*1.7) hacía que el último, arrancando ya muy
+    // arriba (y=0.82), sobresaliera mucho más allá de la copa nominal
+    // (apice en 1.36×alturaCopa) — más puntiagudo que antes de este
+    // cambio, no menos. El último nivel usa el hueco que queda de verdad
+    // hasta la copa (`alturaCopa*(1-y)`), no el mismo alto que el resto.
+    const alturaCono = esUltimo ? alturaCopa * (1 - y) * 0.95 : alturaNivel * 1.7;
     const baseY = alturaTronco + alturaCopa * y;
     const cono = new THREE.Mesh(new THREE.ConeGeometry(radioCopaBase * radio, alturaCono, 9), materialCopa);
     cono.position.y = baseY + alturaCono / 2;
     cono.castShadow = true;
     grupo.add(cono);
+    if (esUltimo) apiceConoY = baseY + alturaCono;
   });
+
+  // Remate: una esfera achatada, NUNCA un cono (pedido explícito: "el
+  // pino es demasiado puntiagudo") — se hunde parcialmente en la punta
+  // del último cono para redondearla del todo, en vez de dejar un
+  // vértice agudo visible.
+  const radioRemate = radioCopaBase * NIVELES_PINO[NIVELES_PINO.length - 1].radio * 0.55;
+  const remate = new THREE.Mesh(new THREE.SphereGeometry(radioRemate, 10, 8), materialCopa);
+  remate.scale.y = 0.8;
+  remate.position.y = apiceConoY - radioRemate * 0.5;
+  remate.castShadow = true;
+  grupo.add(remate);
 
   // Detrás de la casa: dirección CONTRARIA a la cámara (-dirCamaraXZ), el
   // lado que la cámara isométrica fija no ve de frente. Misma lección que
@@ -2236,7 +2260,7 @@ const COLOR_BANDERA = 0xb53a2e;
 // grande en la dirección contraria, pedido explícito otra vez. Punto
 // intermedio.
 const ESCALA_BUZON = 1.2;
-function construirBuzon(geo) {
+function construirBuzon(geo, dirCamaraXZ) {
   const grupo = new THREE.Group();
   const alturaPoste = 0.85;
 
@@ -2275,11 +2299,18 @@ function construirBuzon(geo) {
   // necesariamente un rectángulo (`geo.esquinasSuelo` es un quad POR
   // CELDA), así que se usa `geo.esquinasCaja` — las 4 esquinas del
   // rectángulo que envuelve la huella entera, mismo papel que tenían las
-  // esquinas reales en la Fase 6. Se elige una fija (índice 0, no
-  // aleatoria) y se empuja un poco más hacia fuera en la misma dirección
-  // (centro→esquina), para que el buzón quede claramente en la hierba,
-  // no pegado al cristal.
-  const esquina = geo.esquinasCaja[0];
+  // esquinas reales en la Fase 6.
+  //
+  // La esquina se elige por PROYECCIÓN sobre `dirCamaraXZ` (2026-08-19,
+  // pedido explícito: "mueve el buzón a la esquina de la casa más cercana
+  // a la cámara") — `dirCamaraXZ` apunta desde el centro de la escena
+  // HACIA la cámara (misma definición que ya usa `signoHaciaCamara`), así
+  // que la esquina con mayor producto escalar contra ese vector es la que
+  // queda más adelantada hacia la cámara, no la más lejana. Antes era un
+  // índice fijo (0), sin relación con la cámara.
+  const esquina = geo.esquinasCaja.reduce((mejor, e) =>
+    e.x * dirCamaraXZ.x + e.z * dirCamaraXZ.z > mejor.x * dirCamaraXZ.x + mejor.z * dirCamaraXZ.z ? e : mejor,
+  );
   const magEsquina = Math.hypot(esquina.x, esquina.z);
   const nx = esquina.x / magEsquina;
   const nz = esquina.z / magEsquina;
@@ -3045,7 +3076,7 @@ export function crearEscena3D(contenedor, plano, alturaTecho, sol, clima = {}, l
   scene.add(construirIsla(radioIsla, radioHabitacion, nocturnidadActual, geo));
   scene.add(construirArbol(geo, radioIsla, dirCamaraXZ, nocturnidadActual, sol.nubesPct));
   scene.add(construirPino(geo, radioIsla, dirCamaraXZ));
-  scene.add(construirBuzon(geo));
+  scene.add(construirBuzon(geo, dirCamaraXZ));
   scene.add(construirFarola(geo, dirCamaraXZ, nocturnidadActual, sol.nubesPct));
   const radio = calcularRadioEscena(scene, objetivo);
   const camera = construirCamara(objetivo, radio, azimutBase, ancho / alto);
