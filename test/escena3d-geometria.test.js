@@ -207,7 +207,7 @@ caso('forma en L: esquinasCaja sigue siendo el rectángulo que ENVUELVE toda la 
   assert.ok(cerca(geoL.anchoLateral, 6 * geoL.escala));
 });
 
-console.log('\n--- calcularGeometria (puerta: hueco sin geometría propia) ---');
+console.log('\n--- calcularGeometria (puerta: hoja de madera, no un hueco vacío) ---');
 
 const cols2 = 6;
 const filas2 = 4;
@@ -228,19 +228,28 @@ const planoPuerta = {
 };
 const geoPuerta = calcularGeometria(planoPuerta, 2.5);
 
-caso('un tramo de clase "puerta" no genera ninguna pared (hueco real en la malla)', () => {
+caso('un tramo de clase "puerta" SÍ genera su propia pared (hoja de madera), no un hueco vacío', () => {
   // Comparación robusta, sin calcular coordenadas de mundo a mano: el
-  // MISMO plano pero con ese segmento como 'muro' en vez de 'puerta'
-  // fusiona todo el tabique interior en un único tramo continuo (mismo
-  // tipo/exterior/faceta a lo largo de las 4 celdas) — una pared menos
-  // que con la puerta, que rompe esa continuidad en dos tramos con un
-  // hueco real en medio.
+  // MISMO plano pero con ese segmento como 'muro' en vez de 'puerta' fusiona
+  // todo el tabique interior en un único tramo continuo (mismo
+  // tipo/exterior/faceta a lo largo de las 4 celdas) — dos paredes menos
+  // que con la puerta, que rompe esa continuidad en tres tramos (muro,
+  // puerta, muro) y desde este cambio los tres producen geometría propia,
+  // no solo los dos de muro como antes.
   const planoSinPuerta = JSON.parse(JSON.stringify(planoPuerta));
   const segPuerta = planoSinPuerta.segmentos.find((s) => s.clase === 'puerta');
   segPuerta.clase = 'muro';
   const geoSinPuerta = calcularGeometria(planoSinPuerta, 2.5);
 
-  assert.equal(geoSinPuerta.paredes.length, geoPuerta.paredes.length - 1);
+  assert.equal(geoSinPuerta.paredes.length, geoPuerta.paredes.length - 2);
+});
+
+caso('la puerta es más baja que el resto de la pared (no llega hasta el techo) y apoya en el suelo', () => {
+  const puerta = geoPuerta.paredes.find((p) => p.puerta);
+  assert.ok(puerta, 'debería haber una pared marcada como puerta');
+  assert.ok(puerta.alto < geoPuerta.altura);
+  assert.ok(cerca(puerta.centro.y, puerta.alto / 2)); // apoyada en el suelo, no centrada en la altura de la pared
+  assert.ok(cerca(puerta.centro.y - puerta.alto / 2, 0)); // el borde inferior toca el suelo
 });
 
 console.log('\n--- calcularGeometria (escala con más/menos superficie real) ---');

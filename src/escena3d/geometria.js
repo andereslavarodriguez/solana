@@ -45,7 +45,8 @@ function perpendicular({ x, z }) {
 // Convierte un tramo de pared (src/model/plano.js: {tipo, fijo, inicio,
 // fin, longitudCeldas, clase, exterior, faceta}, en coordenadas de
 // cuadrícula) al mismo objeto "pared" que ya consume escena3d/escena.js
-// sin cambios: {centro, normal, ancho, alto, cristal, anchoVentana?}.
+// sin cambios: {centro, normal, ancho, alto, exterior, cristal,
+// anchoVentana?, puerta?}.
 //
 // Una ventana ya es, por construcción, un tramo PROPIO (fusionarEnTramos
 // corta la línea en cuanto cambia la clase) — así que su anchoVentana
@@ -56,23 +57,27 @@ function perpendicular({ x, z }) {
 // aparte — construirParedConVentana (escena.js) ya no construye ninguna
 // franja cuando anchoVentana===ancho (su cálculo de anchoLado da ~0).
 //
-// Los tramos 'puerta' NO llegan a esta función (se filtran antes, ver
-// calcularGeometria): una puerta es un hueco sin geometría propia
-// (decisión de la Fase 2, ver docs/estado.md) — la pared simplemente no
-// aparece ahí.
+// Los tramos 'puerta' SÍ llegan a esta función (pedido explícito: "estaria
+// bien que las puertas tuvieran una forma en la representación 3D") — a
+// diferencia de la decisión original de la Fase 2 (hueco sin geometría
+// propia), ahora producen su propio objeto `puerta:true`, con menos altura
+// que el resto de la pared (no llega hasta el techo) y apoyado en el
+// suelo, no centrado verticalmente como una pared/ventana normal.
+const FRACCION_ALTURA_PUERTA = 0.82; // ~2m de puerta con una casa de 2.5m de techo — no llega al techo, pedido explícito
+
 function construirParedDesdeTramo(tramo, punto, altura, ejeProfundidad, ejeLateral) {
   let p1;
   let p2;
   let normal;
 
   if (tramo.tipo === 'H') {
-    p1 = punto(tramo.inicio, tramo.fijo, altura / 2);
-    p2 = punto(tramo.fin + 1, tramo.fijo, altura / 2);
+    p1 = punto(tramo.inicio, tramo.fijo, 0);
+    p2 = punto(tramo.fin + 1, tramo.fijo, 0);
     const signo = tramo.faceta === 'trasera' ? -1 : 1;
     normal = { x: ejeProfundidad.x * signo, y: 0, z: ejeProfundidad.z * signo };
   } else {
-    p1 = punto(tramo.fijo, tramo.inicio, altura / 2);
-    p2 = punto(tramo.fijo, tramo.fin + 1, altura / 2);
+    p1 = punto(tramo.fijo, tramo.inicio, 0);
+    p2 = punto(tramo.fijo, tramo.fin + 1, 0);
     // 'derecha' (no 'izquierda'): col menor = fachada "derecha" desde
     // 2026-08-18 (ver src/model/plano.js#clasificarSegmento y
     // src/model/paredes.js — los tres tienen que cambiar juntos, un bug
@@ -82,10 +87,24 @@ function construirParedDesdeTramo(tramo, punto, altura, ejeProfundidad, ejeLater
     normal = { x: ejeLateral.x * signo, y: 0, z: ejeLateral.z * signo };
   }
 
-  const centro = { x: (p1.x + p2.x) / 2, y: altura / 2, z: (p1.z + p2.z) / 2 };
   const ancho = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+  const centroX = (p1.x + p2.x) / 2;
+  const centroZ = (p1.z + p2.z) / 2;
 
-  const base = { centro, normal, ancho, alto: altura };
+  if (tramo.clase === 'puerta') {
+    const altoPuerta = altura * FRACCION_ALTURA_PUERTA;
+    return {
+      centro: { x: centroX, y: altoPuerta / 2, z: centroZ },
+      normal,
+      ancho,
+      alto: altoPuerta,
+      exterior: tramo.exterior,
+      puerta: true,
+    };
+  }
+
+  const centro = { x: centroX, y: altura / 2, z: centroZ };
+  const base = { centro, normal, ancho, alto: altura, exterior: tramo.exterior };
   if (tramo.clase !== 'ventana') return { ...base, cristal: false };
   return { ...base, cristal: true, anchoVentana: ancho };
 }
@@ -151,9 +170,7 @@ export function calcularGeometria(plano, alturaTecho) {
   const anchoLateral = (maxCol - minCol + 1) * unidad;
   const profundidad = (maxFila - minFila + 1) * unidad;
 
-  const paredes = fusionarEnTramos(plano)
-    .filter((t) => t.clase !== 'puerta')
-    .map((t) => construirParedDesdeTramo(t, punto, altura, ejeProfundidad, ejeLateral));
+  const paredes = fusionarEnTramos(plano).map((t) => construirParedDesdeTramo(t, punto, altura, ejeProfundidad, ejeLateral));
 
   // Suelo/techo: un quad por celda interior, no un único rectángulo — la
   // huella ya no es necesariamente un rectángulo simple. Cada quad

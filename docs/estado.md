@@ -1,15 +1,18 @@
 # Estado del proyecto
 
-Última actualización: 2026-08-19 (el espejo real de la casa dibujada
+Última actualización: 2026-08-19 (las puertas del plano ya tienen forma
+3D — antes eran un hueco vacío en la malla — y las paredes distinguen
+fachada exterior, con tablas de madera, de tabique interior, liso — ver
+"Puertas con forma 3D, fachada exterior de madera / interior lisa" al
+final del documento. Antes de eso, "el espejo real de la casa dibujada
 estaba en la fórmula de coordenadas de geometria.js, no en las etiquetas
 izquierda/derecha como se pensó primero — ver "El espejo de verdad: la
-fórmula de coordenadas, no las etiquetas" al final del documento. Justo
-antes, tres correcciones más tras probar en el móvil real (el primer
-intento de arreglar izquierda/derecha, incompleto; buzón incrustado con
-el árbol; editor de plano poco usable) y, antes de esas, "Editor de
-plano en cuadrícula: casa multi-habitación con paredes/puertas/ventanas"
-— la casa deja de ser una habitación rectangular fija con exactamente 2
-ventanas)
+fórmula de coordenadas, no las etiquetas". Justo antes, tres correcciones
+más tras probar en el móvil real (el primer intento de arreglar
+izquierda/derecha, incompleto; buzón incrustado con el árbol; editor de
+plano poco usable) y, antes de esas, "Editor de plano en cuadrícula: casa
+multi-habitación con paredes/puertas/ventanas" — la casa deja de ser una
+habitación rectangular fija con exactamente 2 ventanas)
 
 Trabajamos una fase por sesión. Al empezar una sesión nueva: lee este archivo,
 confirma en qué fase estamos, y no avances a la siguiente fase sin que la actual
@@ -4942,3 +4945,129 @@ más desplegar (`centro·normal` daba negativo).
    real (sin ninguna ventana izquierda/derecha, solo frontal/trasera) no
    cambia en absoluto — la sombra/parche de sol a las 17:30 es idéntica
    a antes de tocar nada de esto.
+
+### Puertas con forma 3D, fachada exterior de madera / interior lisa (2026-08-19)
+
+Pedido explícito: "estaria bien que las puertas tuvieran una forma en la
+representacion 3d. la de fuera al menos. tambien la pared exterior
+deberia tener una forma diferente que la interior... por fuera tablas de
+madera verticales y por dentro un color liso, crema o algo claro. las
+puertas que sean de madera pero no lleguen hasta el techo. como extra
+podriamos poner algunos muebles pero eso si no es mucho trabajo. si es
+demasiado dejalo sin muebles."
+
+1. **Las puertas dejan de ser un hueco sin geometría propia (decisión
+   original de la Fase 2 del editor de plano) — ahora SÍ generan su
+   propia pared, una hoja de madera con paneles hundidos y pomo (textura
+   en `<canvas>`, mismo recurso ya usado en toda la escena, sin ningún
+   asset externo), más baja que el resto de la pared y apoyada en el
+   suelo.** `construirParedDesdeTramo` (`geometria.js`) calcula
+   `p1`/`p2`/`normal`/`ancho` igual que antes para cualquier tramo, pero
+   ahora, si `tramo.clase === 'puerta'`, devuelve un objeto `puerta:true`
+   con `alto = altura * FRACCION_ALTURA_PUERTA` (0.82 — no llega al
+   techo, pedido explícito) y `centro.y = alto/2` (apoyada en el suelo,
+   no centrada en la altura de la pared como una ventana). `calcularGeometria`
+   ya no filtra los tramos `'puerta'` fuera de `geo.paredes`. Se hizo
+   para AMBAS puertas (interior y exterior), no solo la exterior pedida
+   como mínimo — mismo coste de código para las dos, y una puerta
+   interior con forma también ayuda a que la casa dibujada se lea como
+   una casa de verdad.
+
+2. **Pared exterior con tablas de madera vertical, interior lisa —
+   requirió materiales POR CARA de la misma caja (`THREE.BoxGeometry`
+   con un array de 6 materiales, uno por grupo de cara), no un material
+   único por pared.** `construirCajaMuro` (nuevo, `escena.js`) sustituye
+   la construcción directa de `THREE.Mesh` con material único que tenían
+   `construirParedOpaca` y las franjas laterales de
+   `construirParedConVentana` — las dos reutilizan la misma función
+   ahora. Solo se aplica textura de madera a la cara que da HACIA FUERA
+   de una pared marcada `exterior:true` (tramos que la Fase 3 de la
+   generalización a cualquier casa ya distingue de un tabique interior);
+   el resto de caras (incluida la cara interior de esa misma pared, y las
+   dos caras de cualquier tabique) siguen con el material crema liso de
+   siempre (`construirMaterialOpaco`, sin cambios).
+
+3. **Bug real, encontrado en la primera captura: la madera no se veía en
+   ninguna pared — quedaba como un gris-marrón plano sin ninguna veta,
+   pese a que el canvas sí dibujaba tablas con juntas oscuras bien
+   marcadas.** Causa: el `repeat` de la textura se calculaba como
+   `ancho / ANCHO_TABLA_MADERA` (metros de pared entre metros de UNA
+   tabla) — pero una sola repetición ("tile") del canvas ya dibuja
+   `NUM_TABLAS_TEXTURA` (4) tablas juntas, así que dividir solo por el
+   ancho de una tabla sobre-repetía la textura ~4× de lo que tocaba: en
+   una pared normal, cada tabla acababa ocupando pocos centímetros en
+   pantalla, por debajo de la resolución real — el filtrado de mipmap
+   promedia patrones más finos que un texel en un gris uniforme, que es
+   exactamente lo que se veía. Arreglado dividiendo por
+   `ANCHO_TABLA_MADERA * NUM_TABLAS_TEXTURA` (el ancho real de UN tile
+   completo), no por el de una sola tabla — confirmado con captura
+   antes/después que las vetas y juntas ya se distinguen con claridad.
+
+4. **Segundo bug real, más de fondo — un `Object3D` normal (Group/Mesh)
+   invierte el sentido de `lookAt()` respecto a una cámara, y
+   `orientarSegunNormal` (ya existente, reutilizada tal cual) usa
+   `lookAt()` sobre paredes, que son Groups/Meshes, no cámaras.**
+   Confirmado leyendo `Object3D.lookAt` en el propio código fuente de
+   three.js (no asumido): para un objeto que NO es cámara ni luz, llama
+   a `Matrix4.lookAt(target, position, up)` — con `eye` y `target`
+   intercambiados respecto al caso cámara/luz
+   (`Matrix4.lookAt(position, target, up)`) — y `Matrix4.lookAt` define
+   el eje local +Z como `normalize(eye − target)`. Con los argumentos
+   intercambiados, ese +Z local sale `normalize(objetivo − centro)`, es
+   decir, apunta hacia `pared.normal` (hacia FUERA de la casa) — **al
+   revés** de lo que un comentario ya existente en
+   `construirReflejosCristal` (Fase 6, checkpoint 1) asumía ("local -Z
+   hacia fuera, local +Z hacia dentro"). Diagnosticado con una prueba de
+   colores planos (rojo en los índices 0-4 del array de materiales, azul
+   en el índice 5) ANTES de fiarse de que la textura sutil estuviera bien
+   — la primera versión (madera en el índice 5, cara -Z) mostraba la
+   madera en las paredes LEJANAS (las que se ven desde dentro, por donde
+   se mira hacia la habitación) y el color liso en las CERCANAS (las que
+   se ven desde fuera) — justo al revés de lo pedido. Con el color plano
+   forzado, la inversión era inequívoca al instante, sin depender de
+   apreciar diferencias sutiles de veta en una captura. Arreglado
+   poniendo la madera en el índice 4 (cara +Z) y el color liso en el
+   índice 5. **No se ha tocado `construirReflejosCristal`** — ese código
+   lleva verificado en captura desde hace muchos checkpoints y sigue
+   funcionando bien; su comentario describe mal la convención real de
+   `lookAt()`, pero el resultado final es correcto (probablemente
+   ajustado a base de prueba y error con capturas reales en su momento,
+   no derivado a mano) — se deja tal cual, solo se corrigió el nuevo
+   código.
+
+5. **Muebles: NO implementados — el propio pedido daba la salida
+   explícita ("si es demasiado dejalo sin muebles"), y aquí sí lo era.**
+   El plano en cuadrícula (Fase 3 de la generalización a cualquier casa)
+   solo sabe qué celdas son "interior de la casa" en conjunto (flood
+   fill desde fuera) — no distingue HABITACIONES individuales entre sí
+   (una puerta no corta la conectividad a propósito, spec del editor).
+   Colocar muebles con sentido (que no floten sobre un umbral, que no se
+   incrusten en una pared, uno por habitación y no amontonados) exigiría
+   segmentar el interior en habitaciones separadas por los propios muros
+   — lógica nueva de la que no hay ni rastro hoy, no un ajuste rápido
+   sobre algo ya existente (a diferencia de puertas/fachadas, que
+   reutilizaron por completo los tramos y materiales ya calculados). Se
+   comunicó esta razón al usuario en vez de intentarlo a medias con
+   posiciones fijas arbitrarias que probablemente quedarían mal en
+   cualquier plano que no sea el rectángulo de referencia.
+
+6. **Verificación:** `test/escena3d-geometria.test.js` — el caso
+   existente "un tramo de clase 'puerta' no genera ninguna pared" se
+   reescribió por completo (ya no es cierto, es justo el cambio de este
+   commit) más un caso nuevo que comprueba que la puerta es más baja que
+   la pared y apoya en el suelo (`centro.y - alto/2 ≈ 0`) — 21 casos OK
+   en ese fichero (antes 20), 191 en total en `npm test`, sin romper
+   ningún otro test (ni de `src/model/`, que no se tocó). `npm run build`
+   sin errores. Visual con un script ad-hoc de Playwright (no
+   committeado, mismo patrón que `captura-escena3d.mjs` pero sembrando
+   `solana:plano` en `localStorage` con `page.addInitScript` antes de
+   navegar): un plano de dos habitaciones con una puerta exterior en la
+   fachada frontal, una puerta interior en el tabique que las separa y
+   una ventana — confirmado que ambas puertas se ven como una hoja de
+   madera con paneles y pomo, más bajas que el techo; las paredes
+   exteriores (incluidas las franjas a los lados de la ventana) muestran
+   vetas y juntas de madera verticales en su cara de fuera, y el tabique
+   interior se queda liso/crema en las dos caras. Verificado también que
+   el piso migrado por defecto del usuario real (rectangular, sin
+   puertas) se sigue viendo bien, de día y de noche, en landscape y en
+   retrato de móvil — sin errores de consola en ningún caso.

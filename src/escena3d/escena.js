@@ -129,21 +129,207 @@ function construirMaterialOpaco(signoCamara) {
 }
 
 function construirPared(pared, signoCamara, entorno, factorSol) {
+  if (pared.puerta) {
+    return construirPuerta(pared);
+  }
   if (!pared.cristal) {
     return construirParedOpaca(pared, signoCamara);
   }
   return construirParedConVentana(pared, signoCamara, entorno, factorSol);
 }
 
+// Fachada exterior (pedido explícito: "que por fuera se vea como tablas de
+// madera verticales y por dentro un color liso, crema o algo claro") —
+// tablas de madera generadas en <canvas> (mismo recurso ya usado en toda la
+// escena, sin ningún asset externo), solo en la cara que da HACIA FUERA de
+// la casa; la cara de dentro sigue siendo el mismo material crema liso de
+// siempre (construirMaterialOpaco). Las paredes INTERIORES (tabiques entre
+// habitaciones, `pared.exterior === false`) no llevan madera en ningún lado
+// — las dos caras de un tabique están dentro de la casa.
+const ANCHO_TABLA_MADERA = 0.35; // m por tabla real — controla cuántas veces se repite la textura según el ancho de cada pared
+const NUM_TABLAS_TEXTURA = 4; // cuántas tablas dibuja UNA sola repetición (tile) de la textura
+
+let texturaMaderaExteriorBase = null;
+function construirTexturaMaderaExterior() {
+  const tam = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = tam;
+  canvas.height = tam;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#b08148';
+  ctx.fillRect(0, 0, tam, tam);
+  const numTablas = NUM_TABLAS_TEXTURA;
+  const anchoTabla = tam / numTablas;
+  for (let i = 0; i < numTablas; i += 1) {
+    const x = i * anchoTabla;
+    // Alterna un tono ligeramente más oscuro entre tablas contiguas —
+    // sugiere tablas individuales sin necesitar geometría propia por tabla.
+    if (i % 2 === 1) {
+      ctx.fillStyle = 'rgba(60,35,15,0.1)';
+      ctx.fillRect(x, 0, anchoTabla, tam);
+    }
+    // Veta vertical sutil dentro de cada tabla.
+    ctx.strokeStyle = 'rgba(60,35,15,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + anchoTabla * 0.35, 0);
+    ctx.lineTo(x + anchoTabla * 0.4, tam);
+    ctx.stroke();
+    // Junta entre tablas.
+    ctx.strokeStyle = 'rgba(45,25,10,0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, tam);
+    ctx.stroke();
+  }
+  return new THREE.CanvasTexture(canvas);
+}
+
+function texturaMaderaExterior(ancho) {
+  if (!texturaMaderaExteriorBase) texturaMaderaExteriorBase = construirTexturaMaderaExterior();
+  // Clon por pared (barato: comparte los datos ya dibujados del canvas, solo
+  // cambia el `repeat`) — así cada pared puede tener sus propias
+  // repeticiones horizontales según su ancho real sin que se pisen entre sí
+  // (repeat es una propiedad de la propia textura, no del material).
+  const textura = texturaMaderaExteriorBase.clone();
+  textura.wrapS = THREE.RepeatWrapping;
+  textura.wrapT = THREE.RepeatWrapping;
+  // Bug real encontrado en captura: una sola repetición ("tile") de la
+  // textura ya dibuja NUM_TABLAS_TEXTURA tablas — dividir `ancho` solo por
+  // ANCHO_TABLA_MADERA (sin tener en cuenta cuántas tablas hay por tile)
+  // sobre-repetía la textura ~4×, dejando cada tabla de apenas unos cm en
+  // pantalla — por debajo de la resolución real, el filtrado de mipmap las
+  // promediaba a un gris-marrón liso sin ninguna veta visible.
+  const anchoTile = ANCHO_TABLA_MADERA * NUM_TABLAS_TEXTURA;
+  textura.repeat.set(Math.max(1, Math.round(ancho / anchoTile)), 1);
+  textura.needsUpdate = true;
+  return textura;
+}
+
+function construirMaterialMaderaExterior(signoCamara, ancho) {
+  const opacidadParedOpaca = signoCamara === 1 ? OPACIDAD_PARED_OPACA_CERCA : OPACIDAD_PARED_OPACA_LEJOS;
+  return new THREE.MeshStandardMaterial({
+    map: texturaMaderaExterior(ancho),
+    transparent: true,
+    opacity: opacidadParedOpaca,
+    roughness: 0.95,
+    metalness: 0,
+    side: THREE.DoubleSide,
+    depthWrite: true,
+  });
+}
+
+// Caja de pared/tabique reutilizada tanto por una pared opaca completa
+// (construirParedOpaca) como por las franjas laterales de una pared con
+// ventana (construirParedConVentana) — mismo criterio en los dos sitios: la
+// cara EXTERIOR (madera) solo aparece si `exterior` es cierto.
+//
+// BoxGeometry asigna sus 6 caras a los grupos de material en este orden:
+// +x, -x, +y, -y, +z, -z (fuente: three.js, BoxGeometry.js). El eje que
+// `orientarSegunNormal` (lookAt) alinea con `pared.normal` (hacia FUERA de
+// la casa) es el local +Z, NO el -Z — así que la cara exterior es el
+// índice 4 del array, y la interior el índice 5.
+//
+// Bug real encontrado verificando esto en captura (no a mano): un Object3D
+// normal (Group/Mesh, no cámara ni luz) invierte el sentido de lookAt()
+// respecto a una cámara — `Object3D.lookAt` llama internamente a
+// `Matrix4.lookAt(target, position, up)`, con `eye` y `target`
+// intercambiados frente al caso cámara/luz (`Matrix4.lookAt(position,
+// target, up)`) — y `Matrix4.lookAt` define el eje local +Z como
+// `normalize(eye - target)`. Con los argumentos intercambiados, ese +Z
+// local sale `normalize(objetivo - centro)`, es decir, `pared.normal` —
+// justo lo contrario de lo que asume un comentario ya existente en
+// construirReflejosCristal ("local -Z hacia fuera") para el offset de los
+// reflejos: ese código lleva verificado en captura desde hace muchos
+// checkpoints y no se toca aquí, pero su comentario describe mal la
+// convención real de lookAt (el resultado final es correcto igualmente,
+// probablemente ajustado a base de prueba y error). Confirmado aquí con
+// una prueba de colores planos (rojo/azul) antes de fiarse de la textura,
+// no solo derivado a mano.
+function construirCajaMuro(ancho, alto, profundidad, signoCamara, exterior) {
+  const geometria = new THREE.BoxGeometry(ancho, alto, profundidad);
+  const materialInterior = construirMaterialOpaco(signoCamara);
+  if (!exterior) return new THREE.Mesh(geometria, materialInterior);
+  const materialExterior = construirMaterialMaderaExterior(signoCamara, ancho);
+  const materiales = [
+    materialInterior,
+    materialInterior,
+    materialInterior,
+    materialInterior,
+    materialExterior,
+    materialInterior,
+  ];
+  return new THREE.Mesh(geometria, materiales);
+}
+
 function construirParedOpaca(pared, signoCamara) {
-  const geometria = new THREE.BoxGeometry(pared.ancho, pared.alto, 0.15);
-  const malla = new THREE.Mesh(geometria, construirMaterialOpaco(signoCamara));
+  const malla = construirCajaMuro(pared.ancho, pared.alto, 0.15, signoCamara, pared.exterior);
   orientarSegunNormal(malla, pared);
   malla.castShadow = true;
   // receiveShadow — antes solo lo tenía el suelo (construirSuelo): la
   // sombra del marco de la ventana contigua nunca se notaba sobre una
   // pared, solo en el suelo. Pedido explícito: que también se vea en la
   // pared del fondo.
+  malla.receiveShadow = true;
+  malla.userData.esPared = true;
+  return malla;
+}
+
+// Puerta (pedido explícito: "estaria bien que las puertas tuvieran una
+// forma... la de fuera al menos") — hasta ahora (Fase 2) un tramo 'puerta'
+// era un hueco sin geometría propia; ahora se dibuja como una hoja de
+// madera maciza, con paneles hundidos y un pomo (textura en <canvas>, mismo
+// recurso que el resto de la escena, sin ningún asset externo). No
+// distingue interior/exterior (a diferencia de las paredes, ver
+// construirCajaMuro) — pedido explícito era "de madera", sin pedir un
+// acabado distinto por cada lado, y una puerta real también suele ser de
+// un único material visto desde ambos lados. `pared.alto` ya viene reducido
+// desde geometria.js (FRACCION_ALTURA_PUERTA) y `pared.centro.y` ya la deja
+// apoyada en el suelo, no centrada en la altura de la pared — construirPuerta
+// no necesita saber nada de eso, solo dibujar la caja en su sitio.
+const GROSOR_PUERTA = 0.06;
+
+let texturaPuertaCache = null;
+function texturaPuerta() {
+  if (texturaPuertaCache) return texturaPuertaCache;
+  const w = 96;
+  const h = 176;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#9c6b3e';
+  ctx.fillRect(0, 0, w, h);
+  // Marco de la propia hoja.
+  ctx.strokeStyle = 'rgba(50,28,10,0.5)';
+  ctx.lineWidth = 5;
+  ctx.strokeRect(3, 3, w - 6, h - 6);
+  // Dos paneles hundidos, aspecto de puerta clásica.
+  ctx.strokeStyle = 'rgba(50,28,10,0.4)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(w * 0.16, h * 0.06, w * 0.68, h * 0.36);
+  ctx.strokeRect(w * 0.16, h * 0.5, w * 0.68, h * 0.44);
+  // Pomo.
+  ctx.fillStyle = '#e8d9a6';
+  ctx.beginPath();
+  ctx.arc(w * 0.83, h * 0.52, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  texturaPuertaCache = new THREE.CanvasTexture(canvas);
+  return texturaPuertaCache;
+}
+
+function construirPuerta(pared) {
+  const geometria = new THREE.BoxGeometry(pared.ancho, pared.alto, GROSOR_PUERTA);
+  const material = new THREE.MeshStandardMaterial({
+    map: texturaPuerta(),
+    roughness: 0.85,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+  const malla = new THREE.Mesh(geometria, material);
+  orientarSegunNormal(malla, pared);
+  malla.castShadow = true;
   malla.receiveShadow = true;
   malla.userData.esPared = true;
   return malla;
@@ -193,9 +379,8 @@ function construirParedConVentana(pared, signoCamara, entorno, factorSol) {
   // anchoHabitacion, pero puede coincidir con el ancho exacto).
   const anchoLado = (pared.ancho - pared.anchoVentana) / 2;
   if (anchoLado > 0.001) {
-    const materialOpaco = construirMaterialOpaco(signoCamara);
     [-1, 1].forEach((signo) => {
-      const lado = new THREE.Mesh(new THREE.BoxGeometry(anchoLado, pared.alto, 0.15), materialOpaco);
+      const lado = construirCajaMuro(anchoLado, pared.alto, 0.15, signoCamara, pared.exterior);
       lado.position.set(signo * (pared.anchoVentana / 2 + anchoLado / 2), 0, 0);
       lado.castShadow = true;
       lado.receiveShadow = true;
